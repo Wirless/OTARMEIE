@@ -90,6 +90,7 @@ private:
 	void OnInputTimer(wxTimerEvent& event);
 	void OnClickOK(wxCommandEvent& event);
 	void OnClickCancel(wxCommandEvent& event);
+	void OnRefreshClick(wxCommandEvent& event);
 
 	wxRadioBox* options_radio_box;
 
@@ -125,6 +126,7 @@ private:
 	wxStdDialogButtonSizer* buttons_box_sizer;
 	wxButton* ok_button;
 	wxButton* cancel_button;
+	wxButton* refresh_button;
 	Brush* result_brush;
 	uint16_t result_id;
 	bool only_pickupables;

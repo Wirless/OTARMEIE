@@ -194,9 +194,19 @@ FindItemDialog::FindItemDialog(wxWindow* parent, const wxString& title, bool onl
 	// --------------- Items list ---------------
 
 	wxStaticBoxSizer* result_box_sizer = newd wxStaticBoxSizer(newd wxStaticBox(this, wxID_ANY, "Result"), wxVERTICAL);
+
+	// Add a horizontal sizer for the refresh button
+	wxBoxSizer* result_controls_sizer = newd wxBoxSizer(wxHORIZONTAL);
+
+	// Add refresh button
+	refresh_button = newd wxButton(result_box_sizer->GetStaticBox(), wxID_ANY, "Refresh", wxDefaultPosition, wxDefaultSize);
+	result_controls_sizer->Add(refresh_button, 0, wxALL, 5);
+
+	result_box_sizer->Add(result_controls_sizer, 0, wxEXPAND, 5);
 	items_list = newd FindDialogListBox(result_box_sizer->GetStaticBox(), wxID_ANY);
 	items_list->SetMinSize(wxSize(230, 512));
 	result_box_sizer->Add(items_list, 0, wxALL, 5);
+
 	box_sizer->Add(result_box_sizer, 1, wxALL | wxEXPAND, 5);
 
 	this->SetSizer(box_sizer);
@@ -231,6 +241,9 @@ FindItemDialog::FindItemDialog(wxWindow* parent, const wxString& title, bool onl
 	ignore_look->Connect(wxEVT_COMMAND_CHECKBOX_CLICKED, wxCommandEventHandler(FindItemDialog::OnPropertyChange), NULL, this);
 	floor_change->Connect(wxEVT_COMMAND_CHECKBOX_CLICKED, wxCommandEventHandler(FindItemDialog::OnPropertyChange), NULL, this);
 	invalid_item->Connect(wxEVT_COMMAND_CHECKBOX_CLICKED, wxCommandEventHandler(FindItemDialog::OnPropertyChange), NULL, this);
+
+	// Connect the refresh button event
+	refresh_button->Connect(wxEVT_BUTTON, wxCommandEventHandler(FindItemDialog::OnRefreshClick), NULL, this);
 
 	// Make sure all range controls are initially disabled
 	server_id_from_spin->Enable(false);
@@ -267,6 +280,9 @@ FindItemDialog::~FindItemDialog() {
 	ignore_look->Disconnect(wxEVT_COMMAND_CHECKBOX_CLICKED, wxCommandEventHandler(FindItemDialog::OnPropertyChange), NULL, this);
 	floor_change->Disconnect(wxEVT_COMMAND_CHECKBOX_CLICKED, wxCommandEventHandler(FindItemDialog::OnPropertyChange), NULL, this);
 	invalid_item->Disconnect(wxEVT_COMMAND_CHECKBOX_CLICKED, wxCommandEventHandler(FindItemDialog::OnPropertyChange), NULL, this);
+
+	// Disconnect the refresh button event
+	refresh_button->Disconnect(wxEVT_BUTTON, wxCommandEventHandler(FindItemDialog::OnRefreshClick), NULL, this);
 }
 
 FindItemDialog::SearchMode FindItemDialog::getSearchMode() const {
@@ -544,4 +560,8 @@ void FindItemDialog::OnClickOK(wxCommandEvent& WXUNUSED(event)) {
 
 void FindItemDialog::OnClickCancel(wxCommandEvent& WXUNUSED(event)) {
 	EndModal(wxID_CANCEL);
+}
+
+void FindItemDialog::OnRefreshClick(wxCommandEvent& WXUNUSED(event)) {
+	RefreshContentsInternal();
 }
