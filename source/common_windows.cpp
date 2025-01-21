@@ -1023,25 +1023,101 @@ void FindBrushDialog::OnClickOKInternal() {
 	EndModal(1);
 }
 
+
+std::vector<std::string> splitString(const std::string& str, char delimiter) {
+	std::vector<std::string> tokens;
+	std::stringstream ss(str);
+	std::string token;
+
+	while (std::getline(ss, token, delimiter)) {
+		tokens.push_back(token);
+	}
+
+	return tokens;
+}
+
+bool isInteger(const std::string& str) {
+	if (str.empty()) {
+		return false;
+	}
+	for (char ch : str) {
+		if (!std::isdigit(ch)) {
+			return false;
+		}
+	}
+	return true;
+}
+
 void FindBrushDialog::RefreshContentsInternal() {
 	item_list->Clear();
 
+	// We store the raws so they display last of all results
+	bool found_search_results = false;
+
 	std::string search_string = as_lower_str(nstr(search_field->GetValue()));
-	bool do_search = (search_string.size() >= 2);
+	std::vector<std::string> parts = splitString(search_string, '-');
+	if (parts.size() == 2 && isInteger(parts[0]) && isInteger(parts[1])) {
+		uint16_t id_from = std::stoi(parts[0]);
+		uint16_t id_to = std::stoi(parts[1]);
+		for (int id = 0; id <= g_items.getMaxID(); ++id) {
+			ItemType& it = g_items[id];
+			if (it.id == 0) {
+				continue;
+			}
 
-	if (do_search) {
+			if (it.id < id_from || it.id > id_to) {
+				continue;
+			}
 
-		bool found_search_results = false;
+			RAWBrush* raw_brush = it.raw_brush;
+			if (!raw_brush) {
+				continue;
+			}
 
+			found_search_results = true;
+			item_list->AddBrush(raw_brush);
+		}
+	} else if (!parts.empty()) {
+		for (auto& search_text : parts) {
+			const BrushMap& brushes_map = g_brushes.getMap();
+			for (BrushMap::const_iterator iter = brushes_map.begin(); iter != brushes_map.end(); ++iter) {
+				const Brush* brush = iter->second;
+				if (!brush || as_lower_str(brush->getName()).find(search_text) == std::string::npos) {
+					continue;
+				}
+
+				if (brush->isRaw()) {
+					continue;
+				}
+
+				found_search_results = true;
+				item_list->AddBrush(const_cast<Brush*>(brush));
+			}
+
+			for (int id = 0; id <= g_items.getMaxID(); ++id) {
+				ItemType& it = g_items[id];
+				if (it.id == 0) {
+					continue;
+				}
+
+				RAWBrush* raw_brush = it.raw_brush;
+				if (!raw_brush) {
+					continue;
+				}
+
+				if (as_lower_str(raw_brush->getName()).find(search_text) == std::string::npos) {
+					continue;
+				}
+
+				found_search_results = true;
+				item_list->AddBrush(raw_brush);
+			}
+		}
+	} else if (search_string.size() >= 2) {
 		const BrushMap& brushes_map = g_brushes.getMap();
-
-		// We store the raws so they display last of all results
-		std::deque<const RAWBrush*> raws;
-
 		for (BrushMap::const_iterator iter = brushes_map.begin(); iter != brushes_map.end(); ++iter) {
 			const Brush* brush = iter->second;
-
-			if (as_lower_str(brush->getName()).find(search_string) == std::string::npos) {
+			if (!brush || as_lower_str(brush->getName()).find(search_string) == std::string::npos) {
 				continue;
 			}
 
@@ -1071,17 +1147,12 @@ void FindBrushDialog::RefreshContentsInternal() {
 			found_search_results = true;
 			item_list->AddBrush(raw_brush);
 		}
+	}
 
-		while (raws.size() > 0) {
-			item_list->AddBrush(const_cast<RAWBrush*>(raws.front()));
-			raws.pop_front();
-		}
-
-		if (found_search_results) {
-			item_list->SetSelection(0);
-		} else {
-			item_list->SetNoMatches();
-		}
+	if (found_search_results) {
+		item_list->SetSelection(0);
+	} else {
+		item_list->SetNoMatches();
 	}
 	item_list->Refresh();
 }
