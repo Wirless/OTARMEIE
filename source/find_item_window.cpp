@@ -38,45 +38,73 @@ FindItemDialog::FindItemDialog(wxWindow* parent, const wxString& title, bool onl
 	this->SetSizeHints(wxDefaultSize, wxDefaultSize);
 
 	wxBoxSizer* box_sizer = newd wxBoxSizer(wxHORIZONTAL);
-
 	wxBoxSizer* options_box_sizer = newd wxBoxSizer(wxVERTICAL);
 
+	// Radio box choices
 	wxString radio_boxChoices[] = { "Find by Server ID",
 									"Find by Client ID",
 									"Find by Name",
 									"Find by Types",
 									"Find by Properties" };
-
 	int radio_boxNChoices = sizeof(radio_boxChoices) / sizeof(wxString);
 	options_radio_box = newd wxRadioBox(this, wxID_ANY, wxEmptyString, wxDefaultPosition, wxDefaultSize, radio_boxNChoices, radio_boxChoices, 1, wxRA_SPECIFY_COLS);
 	options_radio_box->SetSelection(SearchMode::ServerIDs);
 	options_box_sizer->Add(options_radio_box, 0, wxALL | wxEXPAND, 5);
 
+	// Server ID controls
 	wxStaticBoxSizer* server_id_box_sizer = newd wxStaticBoxSizer(newd wxStaticBox(this, wxID_ANY, "Server ID"), wxVERTICAL);
 	server_id_spin = newd wxSpinCtrl(server_id_box_sizer->GetStaticBox(), wxID_ANY, wxEmptyString, wxDefaultPosition, wxDefaultSize, wxSP_ARROW_KEYS, 100, g_items.getMaxID(), 100);
 	server_id_box_sizer->Add(server_id_spin, 0, wxALL | wxEXPAND, 5);
+	
+	invalid_item = newd wxCheckBox(server_id_box_sizer->GetStaticBox(), wxID_ANY, "Invalid Item", wxDefaultPosition, wxDefaultSize, 0);
+	server_id_box_sizer->Add(invalid_item, 0, wxALL, 5);
+	
+	options_box_sizer->Add(server_id_box_sizer, 0, wxALL | wxEXPAND, 5);
 
-	invalid_item = newd wxCheckBox(server_id_box_sizer->GetStaticBox(), wxID_ANY, "Force select", wxDefaultPosition, wxDefaultSize, 0);
-	invalid_item->SetToolTip("Force choose item ID that does not appear on the list.");
-	server_id_box_sizer->Add(invalid_item, 1, wxALL | wxEXPAND, 5);
-
-	options_box_sizer->Add(server_id_box_sizer, 1, wxALL | wxEXPAND, 5);
-
+	// Client ID controls
 	wxStaticBoxSizer* client_id_box_sizer = newd wxStaticBoxSizer(newd wxStaticBox(this, wxID_ANY, "Client ID"), wxVERTICAL);
 	client_id_spin = newd wxSpinCtrl(client_id_box_sizer->GetStaticBox(), wxID_ANY, wxEmptyString, wxDefaultPosition, wxDefaultSize, wxSP_ARROW_KEYS, 100, g_gui.gfx.getItemSpriteMaxID(), 100);
 	client_id_spin->Enable(false);
 	client_id_box_sizer->Add(client_id_spin, 0, wxALL | wxEXPAND, 5);
-	options_box_sizer->Add(client_id_box_sizer, 1, wxALL | wxEXPAND, 5);
+	options_box_sizer->Add(client_id_box_sizer, 0, wxALL | wxEXPAND, 5);
 
+	// Name controls
 	wxStaticBoxSizer* name_box_sizer = newd wxStaticBoxSizer(newd wxStaticBox(this, wxID_ANY, "Name"), wxVERTICAL);
 	name_text_input = newd wxTextCtrl(name_box_sizer->GetStaticBox(), wxID_ANY, wxEmptyString, wxDefaultPosition, wxDefaultSize, 0);
 	name_text_input->Enable(false);
 	name_box_sizer->Add(name_text_input, 0, wxALL | wxEXPAND, 5);
-	options_box_sizer->Add(name_box_sizer, 1, wxALL | wxEXPAND, 5);
+	options_box_sizer->Add(name_box_sizer, 0, wxALL | wxEXPAND, 5);
 
-	// spacer
-	options_box_sizer->Add(0, 0, 4, wxALL | wxEXPAND, 5);
+	// Range controls
+	wxStaticBoxSizer* range_box_sizer = newd wxStaticBoxSizer(newd wxStaticBox(this, wxID_ANY, "ID Range"), wxVERTICAL);
+	
+	use_range = newd wxCheckBox(range_box_sizer->GetStaticBox(), wxID_ANY, "Search by Range", wxDefaultPosition, wxDefaultSize, 0);
+	range_box_sizer->Add(use_range, 0, wxALL, 5);
 
+	// Server ID range
+	wxBoxSizer* server_range_sizer = newd wxBoxSizer(wxHORIZONTAL);
+	server_id_from_spin = newd wxSpinCtrl(range_box_sizer->GetStaticBox(), wxID_ANY, wxEmptyString, wxDefaultPosition, wxDefaultSize, wxSP_ARROW_KEYS, 100, g_items.getMaxID(), 100);
+	server_id_to_spin = newd wxSpinCtrl(range_box_sizer->GetStaticBox(), wxID_ANY, wxEmptyString, wxDefaultPosition, wxDefaultSize, wxSP_ARROW_KEYS, 100, g_items.getMaxID(), 100);
+	server_range_sizer->Add(server_id_from_spin, 1, wxALL, 5);
+	server_range_sizer->Add(newd wxStaticText(range_box_sizer->GetStaticBox(), wxID_ANY, "to"), 0, wxALL | wxALIGN_CENTER_VERTICAL, 5);
+	server_range_sizer->Add(server_id_to_spin, 1, wxALL, 5);
+	range_box_sizer->Add(server_range_sizer, 0, wxEXPAND | wxALL, 5);
+
+	// Client ID range
+	wxBoxSizer* client_range_sizer = newd wxBoxSizer(wxHORIZONTAL);
+	client_id_from_spin = newd wxSpinCtrl(range_box_sizer->GetStaticBox(), wxID_ANY, wxEmptyString, wxDefaultPosition, wxDefaultSize, wxSP_ARROW_KEYS, 100, g_gui.gfx.getItemSpriteMaxID(), 100);
+	client_id_to_spin = newd wxSpinCtrl(range_box_sizer->GetStaticBox(), wxID_ANY, wxEmptyString, wxDefaultPosition, wxDefaultSize, wxSP_ARROW_KEYS, 100, g_gui.gfx.getItemSpriteMaxID(), 100);
+	client_range_sizer->Add(client_id_from_spin, 1, wxALL, 5);
+	client_range_sizer->Add(newd wxStaticText(range_box_sizer->GetStaticBox(), wxID_ANY, "to"), 0, wxALL | wxALIGN_CENTER_VERTICAL, 5);
+	client_range_sizer->Add(client_id_to_spin, 1, wxALL, 5);
+	range_box_sizer->Add(client_range_sizer, 0, wxEXPAND | wxALL, 5);
+
+	options_box_sizer->Add(range_box_sizer, 0, wxALL | wxEXPAND, 5);
+
+	// Add spacer
+	options_box_sizer->Add(0, 0, 1, wxEXPAND, 5);
+
+	// Add buttons at the bottom
 	buttons_box_sizer = newd wxStdDialogButtonSizer();
 	ok_button = newd wxButton(this, wxID_OK);
 	buttons_box_sizer->AddButton(ok_button);
@@ -85,7 +113,7 @@ FindItemDialog::FindItemDialog(wxWindow* parent, const wxString& title, bool onl
 	buttons_box_sizer->Realize();
 	options_box_sizer->Add(buttons_box_sizer, 0, wxALIGN_CENTER | wxALL, 5);
 
-	box_sizer->Add(options_box_sizer, 1, wxALL, 5);
+	box_sizer->Add(options_box_sizer, 1, wxALL | wxEXPAND, 5);
 
 	// --------------- Types ---------------
 
@@ -203,6 +231,13 @@ FindItemDialog::FindItemDialog(wxWindow* parent, const wxString& title, bool onl
 	ignore_look->Connect(wxEVT_COMMAND_CHECKBOX_CLICKED, wxCommandEventHandler(FindItemDialog::OnPropertyChange), NULL, this);
 	floor_change->Connect(wxEVT_COMMAND_CHECKBOX_CLICKED, wxCommandEventHandler(FindItemDialog::OnPropertyChange), NULL, this);
 	invalid_item->Connect(wxEVT_COMMAND_CHECKBOX_CLICKED, wxCommandEventHandler(FindItemDialog::OnPropertyChange), NULL, this);
+
+	// Make sure all range controls are initially disabled
+	server_id_from_spin->Enable(false);
+	server_id_to_spin->Enable(false);
+	client_id_from_spin->Enable(false);
+	client_id_to_spin->Enable(false);
+	use_range->Enable(false);
 }
 
 FindItemDialog::~FindItemDialog() {
@@ -231,6 +266,7 @@ FindItemDialog::~FindItemDialog() {
 	has_elevation->Disconnect(wxEVT_COMMAND_CHECKBOX_CLICKED, wxCommandEventHandler(FindItemDialog::OnPropertyChange), NULL, this);
 	ignore_look->Disconnect(wxEVT_COMMAND_CHECKBOX_CLICKED, wxCommandEventHandler(FindItemDialog::OnPropertyChange), NULL, this);
 	floor_change->Disconnect(wxEVT_COMMAND_CHECKBOX_CLICKED, wxCommandEventHandler(FindItemDialog::OnPropertyChange), NULL, this);
+	invalid_item->Disconnect(wxEVT_COMMAND_CHECKBOX_CLICKED, wxCommandEventHandler(FindItemDialog::OnPropertyChange), NULL, this);
 }
 
 FindItemDialog::SearchMode FindItemDialog::getSearchMode() const {
@@ -259,6 +295,12 @@ void FindItemDialog::setSearchMode(FindItemDialog::SearchMode mode) {
 	} else if (mode == SearchMode::Names) {
 		name_text_input->SetFocus();
 	}
+
+	server_id_from_spin->Enable(mode == SearchMode::ServerIDs);
+	server_id_to_spin->Enable(mode == SearchMode::ServerIDs);
+	client_id_from_spin->Enable(mode == SearchMode::ClientIDs);
+	client_id_to_spin->Enable(mode == SearchMode::ClientIDs);
+	use_range->Enable(mode == SearchMode::ServerIDs || mode == SearchMode::ClientIDs);
 }
 
 void FindItemDialog::EnableProperties(bool enable) {
@@ -281,32 +323,52 @@ void FindItemDialog::EnableProperties(bool enable) {
 
 void FindItemDialog::RefreshContentsInternal() {
 	items_list->Clear();
-	ok_button->Enable(false);
-
-	SearchMode selection = (SearchMode)options_radio_box->GetSelection();
 	bool found_search_results = false;
+	
+	SearchMode selection = (SearchMode)options_radio_box->GetSelection();
+	if(selection == SearchMode::ServerIDs) {
+		if(use_range->GetValue()) {
+			uint16_t from_id = std::min(server_id_from_spin->GetValue(), server_id_to_spin->GetValue());
+			uint16_t to_id = std::max(server_id_from_spin->GetValue(), server_id_to_spin->GetValue());
+			
+			for(uint16_t id = from_id; id <= to_id && id <= g_items.getMaxID(); ++id) {
+				if(items_list->GetItemCount() >= size_t(g_settings.getInteger(Config::REPLACE_SIZE))) {
+					break;
+				}
 
-	if (selection == SearchMode::ServerIDs) {
-		result_id = std::min(server_id_spin->GetValue(), 0xFFFF);
-		uint16_t serverID = static_cast<uint16_t>(result_id);
-		if (serverID <= g_items.getMaxID()) {
-			ItemType& item = g_items.getItemType(serverID);
-			RAWBrush* raw_brush = item.raw_brush;
-			if (raw_brush) {
-				if (only_pickupables) {
-					if (item.pickupable) {
+				ItemType& item = g_items[id];
+				if(item.id == 0) continue;
+				
+				RAWBrush* raw_brush = item.raw_brush;
+				if(!raw_brush) continue;
+				
+				if(only_pickupables && !item.pickupable) continue;
+				
+				found_search_results = true;
+				items_list->AddBrush(raw_brush);
+			}
+		} else {
+			result_id = std::min(server_id_spin->GetValue(), 0xFFFF);
+			uint16_t serverID = static_cast<uint16_t>(result_id);
+			if(serverID <= g_items.getMaxID()) {
+				ItemType& item = g_items.getItemType(serverID);
+				RAWBrush* raw_brush = item.raw_brush;
+				if(raw_brush) {
+					if(only_pickupables) {
+						if(item.pickupable) {
+							found_search_results = true;
+							items_list->AddBrush(raw_brush);
+						}
+					} else {
 						found_search_results = true;
 						items_list->AddBrush(raw_brush);
 					}
-				} else {
-					found_search_results = true;
-					items_list->AddBrush(raw_brush);
 				}
 			}
-		}
 
-		if (invalid_item->GetValue()) {
-			found_search_results = true;
+			if (invalid_item->GetValue()) {
+				found_search_results = true;
+			}
 		}
 	} else if (selection == SearchMode::ClientIDs) {
 		uint16_t clientID = (uint16_t)client_id_spin->GetValue();

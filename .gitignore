@@ -8,7 +8,7 @@ build.*/
 build-debug
 build-release
 CMakeLists.txt.user*
-
+*.vs
 # RME
 rme
 rme.cfg

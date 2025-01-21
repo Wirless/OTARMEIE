@@ -65,6 +65,18 @@ public:
 	SearchMode getSearchMode() const;
 	void setSearchMode(SearchMode mode);
 
+	bool getUseRange() const { return use_range->GetValue(); }
+	uint16_t getFromID() const { 
+		if (getSearchMode() == SearchMode::ServerIDs)
+			return server_id_from_spin->GetValue();
+		return client_id_from_spin->GetValue();
+	}
+	uint16_t getToID() const { 
+		if (getSearchMode() == SearchMode::ServerIDs)
+			return server_id_to_spin->GetValue();
+		return client_id_to_spin->GetValue();
+	}
+
 private:
 	void EnableProperties(bool enable);
 	void RefreshContentsInternal();
@@ -85,6 +97,10 @@ private:
 
 	wxSpinCtrl* server_id_spin;
 	wxSpinCtrl* client_id_spin;
+	wxSpinCtrl* server_id_from_spin;
+	wxSpinCtrl* server_id_to_spin;
+	wxSpinCtrl* client_id_from_spin;
+	wxSpinCtrl* client_id_to_spin;
 	wxTextCtrl* name_text_input;
 	wxTimer input_timer;
 	wxCheckBox* unpassable;
@@ -103,6 +119,7 @@ private:
 	wxCheckBox* ignore_look;
 	wxCheckBox* floor_change;
 	wxCheckBox* invalid_item;
+	wxCheckBox* use_range;
 
 	FindDialogListBox* items_list;
 	wxStdDialogButtonSizer* buttons_box_sizer;
