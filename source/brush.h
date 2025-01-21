@@ -252,6 +252,8 @@ public:
 		usesCollection = true;
 	}
 
+
+
 protected:
 	static uint32_t id_counter;
 	uint32_t id;
