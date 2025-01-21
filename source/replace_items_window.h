@@ -123,6 +123,8 @@ public:
 	void OnExecuteButtonClicked(wxCommandEvent& event);
 	void OnCancelButtonClicked(wxCommandEvent& event);
 
+	uint16_t getActualItemIdFromBrush(const Brush* brush) const;
+
 private:
 	void UpdateWidgets();
 

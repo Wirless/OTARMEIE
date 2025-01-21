@@ -265,97 +265,34 @@ void ReplaceItemsDialog::OnReplaceItemClicked(wxMouseEvent& WXUNUSED(event)) {
 	OutputDebugStringA("ReplaceItemsDialog::OnReplaceItemClicked called\n");
 	
 	const Brush* brush = g_gui.GetCurrentBrush();
-	if (!brush) {
-		OutputDebugStringA("No brush selected!\n");
-		return;
-	}
-
-	uint16_t id = 0;
-	if (brush->isRaw()) {
-		RAWBrush* raw = static_cast<RAWBrush*>(const_cast<Brush*>(brush));
-		id = raw->getItemID();
-	} else if (brush->isGround()) {
-		GroundBrush* gb = const_cast<Brush*>(brush)->asGround();
-		if (gb) {
-			// Get the first item from the ground brush's item list
-			const ItemType& type = g_items.getItemType(gb->getID());
-			if (type.id != 0) {
-				id = type.id;
-			} else {
-				// Fallback to the brush ID if no valid item is found
-				id = gb->getID();
-			}
-		}
-	}
-
-	 else {
-		// For other brush types, try to get the server ID
-		id = brush->getID();
-	}
+	uint16_t id = getActualItemIdFromBrush(brush);
 
 	if (id != 0) {
 		replace_button->SetItemId(id);
 		UpdateWidgets();
-		OutputDebugStringA(wxString::Format("Final item ID set: %d\n", id).c_str());
+		OutputDebugStringA(wxString::Format("Final Replace Item ID set: %d\n", id).c_str());
 	} else {
-		OutputDebugStringA("Could not resolve item ID from brush\n");
+		OutputDebugStringA("ReplaceItemsDialog::OnReplaceItemClicked: Could not resolve item ID from brush\n");
 	}
 }
 
 void ReplaceItemsDialog::OnWithItemClicked(wxMouseEvent& WXUNUSED(event)) {
 	OutputDebugStringA("ReplaceItemsDialog::OnWithItemClicked called\n");
-	
+
 	if (replace_button->GetItemId() == 0) {
-		OutputDebugStringA("Replace button has no item selected\n");
+		OutputDebugStringA("ReplaceItemsDialog::OnWithItemClicked: Replace button has no item selected\n");
 		return;
 	}
 
 	const Brush* brush = g_gui.GetCurrentBrush();
-	if (!brush) {
-		OutputDebugStringA("No brush selected!\n");
-		return;
-	}
-
-	uint16_t id = 0;
-	if (brush->isRaw()) {
-		RAWBrush* raw = static_cast<RAWBrush*>(const_cast<Brush*>(brush));
-		id = raw->getItemID();
-		OutputDebugStringA(wxString::Format("RAW brush item ID: %d\n", id).c_str());
-	} else {
-		// Use the same name-based lookup as OnReplaceItemClicked
-		std::string brushName = brush->getName();
-		OutputDebugStringA(wxString::Format("Brush type: %s\n", brushName.c_str()));
-		
-		// Search through all loaded items for matching name
-		for(int i = 0; i <= g_items.getMaxID(); ++i) {
-			const ItemType& type = g_items[i];
-			if(type.id != 0 && type.name == brushName) {
-				id = type.id;
-				OutputDebugStringA(wxString::Format("Found matching item - Name: %s, Server ID: %d\n", 
-					type.name.c_str(), id).c_str());
-				break;
-			}
-		}
-
-		// If no exact match, try partial match
-		if(id == 0) {
-			for(int i = 0; i <= g_items.getMaxID(); ++i) {
-				const ItemType& type = g_items[i];
-				if(type.id != 0 && type.name.find(brushName) != std::string::npos) {
-					id = type.id;
-					OutputDebugStringA(wxString::Format("Found partial match - Name: %s, Server ID: %d\n", 
-						type.name.c_str(), id).c_str());
-					break;
-				}
-			}
-		}
-	}
+	uint16_t id = getActualItemIdFromBrush(brush);
 
 	if (id != 0) {
 		with_button->SetItemId(id);
 		UpdateWidgets();
+		OutputDebugStringA(wxString::Format("Final With Item ID set: %d\n", id).c_str());
 	} else {
-		OutputDebugStringA("Could not resolve item ID from brush\n");
+		OutputDebugStringA("ReplaceItemsDialog::OnWithItemClicked: Could not resolve item ID from brush\n");
 	}
 }
 
@@ -442,4 +379,60 @@ void ReplaceItemsDialog::OnExecuteButtonClicked(wxCommandEvent& WXUNUSED(event))
 
 void ReplaceItemsDialog::OnCancelButtonClicked(wxCommandEvent& WXUNUSED(event)) {
 	Close();
+}
+
+uint16_t ReplaceItemsDialog::getActualItemIdFromBrush(const Brush* brush) const {
+	if (!brush) {
+		OutputDebugStringA("getActualItemIdFromBrush: No brush provided\n");
+		return 0;
+	}
+
+	uint16_t id = 0;
+
+	if (brush->isRaw()) {
+		RAWBrush* raw = static_cast<RAWBrush*>(const_cast<Brush*>(brush));
+		id = raw->getItemID();
+		OutputDebugStringA(wxString::Format("RAW brush item ID: %d\n", id).c_str());
+	} else if (brush->isGround()) {
+		GroundBrush* gb = const_cast<Brush*>(brush)->asGround();
+		if (gb) {
+			// Try to get the actual item ID through the ground brush's properties
+			if (gb->getID() != 0) {
+				// First try to find a matching RAW brush
+				for (const auto& brushPair : g_brushes.getMap()) {
+					if (brushPair.second && brushPair.second->isRaw()) {
+						RAWBrush* raw = static_cast<RAWBrush*>(brushPair.second);
+						const ItemType& rawType = g_items.getItemType(raw->getItemID());
+						if (rawType.brush && rawType.brush->getID() == gb->getID()) {
+							id = raw->getItemID();
+							OutputDebugStringA(wxString::Format("Found matching RAW brush ID: %d for ground brush\n", id).c_str());
+							break;
+						}
+					}
+				}
+
+				// If no RAW brush found, try to get through item database
+				if (id == 0) {
+					const ItemType& type = g_items.getItemType(gb->getID());
+					if (type.id != 0) {
+						id = type.id;
+						OutputDebugStringA(wxString::Format("Found item type ID: %d for ground brush\n", id).c_str());
+					}
+				}
+			}
+		}
+	} else {
+		// For other brush types, try to find the corresponding item ID
+		const ItemType& type = g_items.getItemType(brush->getID());
+		if (type.id != 0) {
+			id = type.id;
+			OutputDebugStringA(wxString::Format("Found item type ID: %d for brush\n", id).c_str());
+		}
+	}
+
+	if (id == 0) {
+		OutputDebugStringA("Could not resolve actual item ID from brush\n");
+	}
+
+	return id;
 }
