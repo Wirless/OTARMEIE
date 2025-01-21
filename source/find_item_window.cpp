@@ -30,7 +30,7 @@ EVT_BUTTON(wxID_CANCEL, FindItemDialog::OnClickCancel)
 END_EVENT_TABLE()
 
 FindItemDialog::FindItemDialog(wxWindow* parent, const wxString& title, bool onlyPickupables /* = false*/) :
-	wxDialog(parent, wxID_ANY, title, wxDefaultPosition, wxSize(800, 600), wxDEFAULT_DIALOG_STYLE),
+	wxDialog(parent, wxID_ANY, title, wxDefaultPosition, wxSize(800, 700), wxDEFAULT_DIALOG_STYLE),
 	input_timer(this),
 	result_brush(nullptr),
 	result_id(0),
@@ -370,26 +370,49 @@ void FindItemDialog::RefreshContentsInternal() {
 				found_search_results = true;
 			}
 		}
-	} else if (selection == SearchMode::ClientIDs) {
-		uint16_t clientID = (uint16_t)client_id_spin->GetValue();
-		for (int id = 100; id <= g_items.getMaxID(); ++id) {
-			ItemType& item = g_items.getItemType(id);
-			if (item.id == 0 || item.clientID != clientID) {
-				continue;
-			}
+	 } else if (selection == SearchMode::ClientIDs) {
+        if (use_range->GetValue()) {
+            const uint16_t from_id = std::min(getFromID(), getToID());
+            const uint16_t to_id = std::max(getFromID(), getToID());
+            for (int id = 100; id <= g_items.getMaxID(); ++id) {
+                ItemType& item = g_items.getItemType(id);
+                if (item.id == 0 || item.clientID < from_id || item.clientID > to_id) {
+                    continue;
+                }
 
-			RAWBrush* raw_brush = item.raw_brush;
-			if (!raw_brush) {
-				continue;
-			}
+                RAWBrush* raw_brush = item.raw_brush;
+                if (!raw_brush) {
+                    continue;
+                }
 
-			if (only_pickupables && !item.pickupable) {
-				continue;
-			}
+                if (only_pickupables && !item.pickupable) {
+                    continue;
+                }
 
-			found_search_results = true;
-			items_list->AddBrush(raw_brush);
-		}
+                found_search_results = true;
+                items_list->AddBrush(raw_brush);
+            }
+        } else {
+            uint16_t clientID = (uint16_t)client_id_spin->GetValue();
+            for (int id = 100; id <= g_items.getMaxID(); ++id) {
+                ItemType& item = g_items.getItemType(id);
+                if (item.id == 0 || item.clientID != clientID) {
+                    continue;
+                }
+
+                RAWBrush* raw_brush = item.raw_brush;
+                if (!raw_brush) {
+                    continue;
+                }
+
+                if (only_pickupables && !item.pickupable) {
+                    continue;
+                }
+
+                found_search_results = true;
+                items_list->AddBrush(raw_brush);
+            }
+        }
 	} else if (selection == SearchMode::Names) {
 		std::string search_string = as_lower_str(nstr(name_text_input->GetValue()));
 		if (search_string.size() >= 2) {
