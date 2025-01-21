@@ -91,6 +91,7 @@ private:
 	void OnClickOK(wxCommandEvent& event);
 	void OnClickCancel(wxCommandEvent& event);
 	void OnRefreshClick(wxCommandEvent& event);
+	void OnReplaceSizeChange(wxCommandEvent& event);
 
 	wxRadioBox* options_radio_box;
 
@@ -127,6 +128,7 @@ private:
 	wxButton* ok_button;
 	wxButton* cancel_button;
 	wxButton* refresh_button;
+	wxSpinCtrl* replace_size_spin;
 	Brush* result_brush;
 	uint16_t result_id;
 	bool only_pickupables;

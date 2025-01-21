@@ -195,12 +195,17 @@ FindItemDialog::FindItemDialog(wxWindow* parent, const wxString& title, bool onl
 
 	wxStaticBoxSizer* result_box_sizer = newd wxStaticBoxSizer(newd wxStaticBox(this, wxID_ANY, "Result"), wxVERTICAL);
 
-	// Add a horizontal sizer for the refresh button
+	// Add a horizontal sizer for the refresh button and replace size
 	wxBoxSizer* result_controls_sizer = newd wxBoxSizer(wxHORIZONTAL);
 
 	// Add refresh button
 	refresh_button = newd wxButton(result_box_sizer->GetStaticBox(), wxID_ANY, "Refresh", wxDefaultPosition, wxDefaultSize);
 	result_controls_sizer->Add(refresh_button, 0, wxALL, 5);
+
+	// Add replace size control
+	result_controls_sizer->Add(newd wxStaticText(result_box_sizer->GetStaticBox(), wxID_ANY, "Max Results:"), 0, wxALL | wxALIGN_CENTER_VERTICAL, 5);
+	replace_size_spin = newd wxSpinCtrl(result_box_sizer->GetStaticBox(), wxID_ANY, wxEmptyString, wxDefaultPosition, wxSize(80, -1), wxSP_ARROW_KEYS, 100, 10000, g_settings.getInteger(Config::REPLACE_SIZE));
+	result_controls_sizer->Add(replace_size_spin, 0, wxALL, 5);
 
 	result_box_sizer->Add(result_controls_sizer, 0, wxEXPAND, 5);
 	items_list = newd FindDialogListBox(result_box_sizer->GetStaticBox(), wxID_ANY);
@@ -244,6 +249,7 @@ FindItemDialog::FindItemDialog(wxWindow* parent, const wxString& title, bool onl
 
 	// Connect the refresh button event
 	refresh_button->Connect(wxEVT_BUTTON, wxCommandEventHandler(FindItemDialog::OnRefreshClick), NULL, this);
+	replace_size_spin->Connect(wxEVT_SPINCTRL, wxCommandEventHandler(FindItemDialog::OnReplaceSizeChange), NULL, this);
 
 	// Make sure all range controls are initially disabled
 	server_id_from_spin->Enable(false);
@@ -283,6 +289,7 @@ FindItemDialog::~FindItemDialog() {
 
 	// Disconnect the refresh button event
 	refresh_button->Disconnect(wxEVT_BUTTON, wxCommandEventHandler(FindItemDialog::OnRefreshClick), NULL, this);
+	replace_size_spin->Disconnect(wxEVT_SPINCTRL, wxCommandEventHandler(FindItemDialog::OnReplaceSizeChange), NULL, this);
 }
 
 FindItemDialog::SearchMode FindItemDialog::getSearchMode() const {
@@ -348,7 +355,7 @@ void FindItemDialog::RefreshContentsInternal() {
 			uint16_t to_id = std::max(server_id_from_spin->GetValue(), server_id_to_spin->GetValue());
 			
 			for(uint16_t id = from_id; id <= to_id && id <= g_items.getMaxID(); ++id) {
-				if(items_list->GetItemCount() >= size_t(g_settings.getInteger(Config::REPLACE_SIZE))) {
+				if(items_list->GetItemCount() >= size_t(replace_size_spin->GetValue())) {
 					break;
 				}
 
@@ -564,4 +571,8 @@ void FindItemDialog::OnClickCancel(wxCommandEvent& WXUNUSED(event)) {
 
 void FindItemDialog::OnRefreshClick(wxCommandEvent& WXUNUSED(event)) {
 	RefreshContentsInternal();
+}
+
+void FindItemDialog::OnReplaceSizeChange(wxCommandEvent& WXUNUSED(event)) {
+	g_settings.setInteger(Config::REPLACE_SIZE, replace_size_spin->GetValue());
 }
