@@ -22,6 +22,10 @@
 #include "gui.h"
 #include "artprovider.h"
 #include "items.h"
+#include "brush.h"
+#include "ground_brush.h"
+#include "wall_brush.h"
+#include "doodad_brush.h"
 
 // ============================================================================
 // ReplaceItemsButton
@@ -258,31 +262,92 @@ void ReplaceItemsDialog::OnListSelected(wxCommandEvent& WXUNUSED(event)) {
 }
 
 void ReplaceItemsDialog::OnReplaceItemClicked(wxMouseEvent& WXUNUSED(event)) {
-	FindItemDialog dialog(this, "Replace Item");
-	if (dialog.ShowModal() == wxID_OK) {
-		uint16_t id = dialog.getResultID();
-		if (id != with_button->GetItemId()) {
-			replace_button->SetItemId(id);
-			UpdateWidgets();
-		}
-	}
-	dialog.Destroy();
-}
-
-void ReplaceItemsDialog::OnWithItemClicked(wxMouseEvent& WXUNUSED(event)) {
-	if (replace_button->GetItemId() == 0) {
+	OutputDebugStringA("ReplaceItemsDialog::OnReplaceItemClicked called\n");
+	
+	const Brush* brush = g_gui.GetCurrentBrush();
+	if (!brush) {
+		OutputDebugStringA("No brush selected!\n");
 		return;
 	}
 
-	FindItemDialog dialog(this, "With Item");
-	if (dialog.ShowModal() == wxID_OK) {
-		uint16_t id = dialog.getResultID();
-		if (id != replace_button->GetItemId()) {
-			with_button->SetItemId(id);
-			UpdateWidgets();
+	uint16_t id = 0;
+	if (brush->isRaw()) {
+		RAWBrush* raw = static_cast<RAWBrush*>(const_cast<Brush*>(brush));
+		id = raw->getItemID();
+		OutputDebugStringA(wxString::Format("RAW brush item ID: %d\n", id).c_str());
+	} else {
+		// For non-RAW brushes, try different methods
+		OutputDebugStringA(wxString::Format("Brush type: %s\n", brush->getName().c_str()));
+		
+		Brush* non_const_brush = const_cast<Brush*>(brush);
+		if (brush->isGround()) {
+			OutputDebugStringA("Ground brush detected\n");
+			if (GroundBrush* gb = non_const_brush->asGround()) {
+				id = gb->getID();
+				OutputDebugStringA(wxString::Format("Ground brush ID: %d\n", id).c_str());
+			}
+		} else if (brush->isWall()) {
+			OutputDebugStringA("Wall brush detected\n");
+			if (WallBrush* wb = non_const_brush->asWall()) {
+				id = wb->getID();
+				OutputDebugStringA(wxString::Format("Wall brush ID: %d\n", id).c_str());
+			}
+		} else if (brush->isDoodad()) {
+			OutputDebugStringA("Doodad brush detected\n");
+			if (DoodadBrush* db = non_const_brush->asDoodad()) {
+				id = db->getID();
+				OutputDebugStringA(wxString::Format("Doodad brush ID: %d\n", id).c_str());
+			}
+		}
+
+		if (id != 0) {
+			const ItemType& type = g_items.getItemType(id);
+			if (type.id != 0) {
+				id = type.id;
+				OutputDebugStringA(wxString::Format("Final resolved item ID: %d\n", id).c_str());
+			}
 		}
 	}
-	dialog.Destroy();
+
+	if (id != 0) {
+		replace_button->SetItemId(id);
+		UpdateWidgets();
+	} else {
+		OutputDebugStringA("Could not resolve item ID from brush\n");
+	}
+}
+
+void ReplaceItemsDialog::OnWithItemClicked(wxMouseEvent& WXUNUSED(event)) {
+	OutputDebugStringA("ReplaceItemsDialog::OnWithItemClicked called\n");
+	
+	if (replace_button->GetItemId() == 0) {
+		OutputDebugStringA("Replace button has no item selected\n");
+		return;
+	}
+
+	const Brush* brush = g_gui.GetCurrentBrush();
+	if (!brush) {
+		OutputDebugStringA("No brush selected!\n");
+		return;
+	}
+
+	uint16_t id = 0;
+	if (brush->isRaw()) {
+		RAWBrush* raw = static_cast<RAWBrush*>(const_cast<Brush*>(brush));
+		id = raw->getItemID();
+		OutputDebugStringA(wxString::Format("RAW brush item ID: %d\n", id).c_str());
+	} else {
+		// For other brush types, try to get the server ID from the brush
+		id = brush->getID();
+		OutputDebugStringA(wxString::Format("Non-RAW brush ID: %d\n", id).c_str());
+	}
+
+	if (id != 0) {
+		with_button->SetItemId(id);
+		UpdateWidgets();
+	} else {
+		OutputDebugStringA("Could not get valid item ID from brush\n");
+	}
 }
 
 void ReplaceItemsDialog::OnAddButtonClicked(wxCommandEvent& WXUNUSED(event)) {
