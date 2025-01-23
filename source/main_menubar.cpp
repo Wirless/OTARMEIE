@@ -921,10 +921,23 @@ void MainMenuBar::OnSearchForItem(wxCommandEvent& WXUNUSED(event)) {
 
 			SearchResultWindow* window = g_gui.ShowSearchWindow();
 			window->Clear();
+
+			// Pass the ignored IDs configuration from the dialog
+			window->SetIgnoredIds(dialog.GetIgnoreIdsText(), dialog.IsIgnoreIdsEnabled());
+
 			for (std::vector<std::pair<Tile*, Item*>>::const_iterator iter = result.begin(); iter != result.end(); ++iter) {
 				Tile* tile = iter->first;
 				Item* item = iter->second;
-				window->AddPosition(wxstr(item->getName()), tile->getPosition());
+				
+				// Format description to include both name and ID
+				wxString description = wxString::Format("%s (ID: %d)", 
+					wxstr(item->getName()),
+					item->getID());
+				
+				OutputDebugStringA(wxString::Format("Adding search result: %s at pos(%d,%d,%d)\n", 
+					description, tile->getPosition().x, tile->getPosition().y, tile->getPosition().z).c_str());
+				
+				window->AddPosition(description, tile->getPosition());
 			}
 		} else {
 			OnSearchForItem::Finder finder(dialog.getResultID(), (uint32_t)g_settings.getInteger(Config::REPLACE_SIZE));
@@ -943,10 +956,23 @@ void MainMenuBar::OnSearchForItem(wxCommandEvent& WXUNUSED(event)) {
 
 			SearchResultWindow* window = g_gui.ShowSearchWindow();
 			window->Clear();
+
+			// Pass the ignored IDs configuration from the dialog
+			window->SetIgnoredIds(dialog.GetIgnoreIdsText(), dialog.IsIgnoreIdsEnabled());
+
 			for (std::vector<std::pair<Tile*, Item*>>::const_iterator iter = result.begin(); iter != result.end(); ++iter) {
 				Tile* tile = iter->first;
 				Item* item = iter->second;
-				window->AddPosition(wxstr(item->getName()), tile->getPosition());
+				
+				// Format description to include both name and ID
+				wxString description = wxString::Format("%s (ID: %d)", 
+					wxstr(item->getName()),
+					item->getID());
+				
+				OutputDebugStringA(wxString::Format("Adding search result: %s at pos(%d,%d,%d)\n", 
+					description, tile->getPosition().x, tile->getPosition().y, tile->getPosition().z).c_str());
+				
+				window->AddPosition(description, tile->getPosition());
 			}
 		}
 
@@ -1100,10 +1126,23 @@ void MainMenuBar::OnSearchForItemOnSelection(wxCommandEvent& WXUNUSED(event)) {
 
 			SearchResultWindow* window = g_gui.ShowSearchWindow();
 			window->Clear();
+
+			// Pass the ignored IDs configuration from the dialog
+			window->SetIgnoredIds(dialog.GetIgnoreIdsText(), dialog.IsIgnoreIdsEnabled());
+
 			for (std::vector<std::pair<Tile*, Item*>>::const_iterator iter = result.begin(); iter != result.end(); ++iter) {
 				Tile* tile = iter->first;
 				Item* item = iter->second;
-				window->AddPosition(wxstr(item->getName()), tile->getPosition());
+				
+				// Format description to include both name and ID
+				wxString description = wxString::Format("%s (ID: %d)", 
+					wxstr(item->getName()),
+					item->getID());
+				
+				OutputDebugStringA(wxString::Format("Adding search result: %s at pos(%d,%d,%d)\n", 
+					description, tile->getPosition().x, tile->getPosition().y, tile->getPosition().z).c_str());
+				
+				window->AddPosition(description, tile->getPosition());
 			}
 		} else {
 			OnSearchForItem::Finder finder(dialog.getResultID(), (uint32_t)g_settings.getInteger(Config::REPLACE_SIZE));
@@ -1122,10 +1161,23 @@ void MainMenuBar::OnSearchForItemOnSelection(wxCommandEvent& WXUNUSED(event)) {
 
 			SearchResultWindow* window = g_gui.ShowSearchWindow();
 			window->Clear();
+
+			// Pass the ignored IDs configuration from the dialog
+			window->SetIgnoredIds(dialog.GetIgnoreIdsText(), dialog.IsIgnoreIdsEnabled());
+
 			for (std::vector<std::pair<Tile*, Item*>>::const_iterator iter = result.begin(); iter != result.end(); ++iter) {
 				Tile* tile = iter->first;
 				Item* item = iter->second;
-				window->AddPosition(wxstr(item->getName()), tile->getPosition());
+				
+				// Format description to include both name and ID
+				wxString description = wxString::Format("%s (ID: %d)", 
+					wxstr(item->getName()),
+					item->getID());
+				
+				OutputDebugStringA(wxString::Format("Adding search result: %s at pos(%d,%d,%d)\n", 
+					description, tile->getPosition().x, tile->getPosition().y, tile->getPosition().z).c_str());
+				
+				window->AddPosition(description, tile->getPosition());
 			}
 		}
 

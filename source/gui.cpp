@@ -851,6 +851,10 @@ void GUI::HideSearchWindow() {
 	}
 }
 
+SearchResultWindow* GUI::GetSearchWindow() {
+	return search_result_window;
+}
+
 SearchResultWindow* GUI::ShowSearchWindow() {
 	if (search_result_window == nullptr) {
 		search_result_window = newd SearchResultWindow(root);

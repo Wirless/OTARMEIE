@@ -77,6 +77,9 @@ public:
 		return client_id_to_spin->GetValue();
 	}
 
+	wxString GetIgnoreIdsText() const { return ignore_ids_text->GetValue(); }
+	bool IsIgnoreIdsEnabled() const { return ignore_ids_checkbox->GetValue(); }
+
 private:
 	void EnableProperties(bool enable);
 	void RefreshContentsInternal();

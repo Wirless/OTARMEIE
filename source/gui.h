@@ -209,6 +209,7 @@ public:
 	wxGLContext* GetGLContext(wxGLCanvas* win);
 
 	// Search Results
+	SearchResultWindow* GetSearchWindow();
 	SearchResultWindow* ShowSearchWindow();
 	void HideSearchWindow();
 

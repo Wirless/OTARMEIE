@@ -28,6 +28,7 @@
 #include <vector>
 #include <string>
 #include "string_utils.h"
+#include "result_window.h"
 
 
 
@@ -640,7 +641,20 @@ void FindItemDialog::OnInputTimer(wxTimerEvent& WXUNUSED(event)) {
 }
 
 void FindItemDialog::OnClickOK(wxCommandEvent& WXUNUSED(event)) {
-	if (invalid_item->GetValue() && (SearchMode)options_radio_box->GetSelection() == SearchMode::ServerIDs && result_id != 0) {
+	OutputDebugStringA("FindItemDialog::OnClickOK called\n");
+
+	// First pass ignored IDs configuration to result window
+	if (SearchResultWindow* window = g_gui.GetSearchWindow()) {
+		window->SetIgnoredIds(ignore_ids_text->GetValue(), ignore_ids_checkbox->GetValue());
+		OutputDebugStringA(wxString::Format("Passed ignored IDs to result window. Enabled: %d, IDs: %s\n",
+			ignore_ids_checkbox->GetValue(),
+			ignore_ids_text->GetValue()).c_str());
+	}
+
+	if (invalid_item->GetValue() && 
+		(SearchMode)options_radio_box->GetSelection() == SearchMode::ServerIDs && 
+		result_id != 0) {
+		OutputDebugStringA(wxString::Format("Selected invalid item with ID: %d\n", result_id).c_str());
 		EndModal(wxID_OK);
 		return;
 	}
@@ -650,6 +664,7 @@ void FindItemDialog::OnClickOK(wxCommandEvent& WXUNUSED(event)) {
 		if (brush) {
 			result_brush = brush;
 			result_id = brush->asRaw()->getItemID();
+			OutputDebugStringA(wxString::Format("Selected brush with ID: %d\n", result_id).c_str());
 			EndModal(wxID_OK);
 		}
 	}
@@ -668,10 +683,14 @@ void FindItemDialog::OnReplaceSizeChange(wxCommandEvent& WXUNUSED(event)) {
 }
 
 void FindItemDialog::ParseIgnoredIDs() {
+	OutputDebugStringA("ParseIgnoredIDs called\n");
+	
 	ignored_ids.clear();
 	ignored_ranges.clear();
 	
 	std::string input = as_lower_str(nstr(ignore_ids_text->GetValue()));
+	OutputDebugStringA(wxString::Format("Parsing ignored IDs input: %s\n", input).c_str());
+	
 	std::vector<std::string> parts = splitString(input, ',');
 	
 	for (const auto& part : parts) {
@@ -682,15 +701,20 @@ void FindItemDialog::ParseIgnoredIDs() {
 				uint16_t to = static_cast<uint16_t>(std::stoi(range[1]));
 				if (from <= to) {
 					ignored_ranges.emplace_back(from, to);
+					OutputDebugStringA(wxString::Format("Added ignored range: %d-%d\n", from, to).c_str());
 				}
 			}
 		} else {
 			if (isInteger(part)) {
 				uint16_t id = static_cast<uint16_t>(std::stoi(part));
 				ignored_ids.push_back(id);
+				OutputDebugStringA(wxString::Format("Added ignored ID: %d\n", id).c_str());
 			}
 		}
 	}
+	
+	OutputDebugStringA(wxString::Format("Total ignored IDs: %zu, Total ranges: %zu\n", 
+		ignored_ids.size(), ignored_ranges.size()).c_str());
 }
 
 namespace RME {

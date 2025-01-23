@@ -20,6 +20,9 @@
 #include "result_window.h"
 #include "gui.h"
 #include "position.h"
+#include <vector>
+#include <algorithm>
+#include "string_utils.h"
 
 BEGIN_EVENT_TABLE(SearchResultWindow, wxPanel)
 EVT_LISTBOX(wxID_ANY, SearchResultWindow::OnClickResult)
@@ -28,7 +31,8 @@ EVT_BUTTON(wxID_CLEAR, SearchResultWindow::OnClickClear)
 END_EVENT_TABLE()
 
 SearchResultWindow::SearchResultWindow(wxWindow* parent) :
-	wxPanel(parent, wxID_ANY) {
+	wxPanel(parent, wxID_ANY),
+	use_ignored_ids(false) {
 	wxSizer* sizer = newd wxBoxSizer(wxVERTICAL);
 	result_list = newd wxListBox(this, wxID_ANY, wxDefaultPosition, wxSize(200, 330), 0, nullptr, wxLB_SINGLE | wxLB_ALWAYS_SB);
 	sizer->Add(result_list, wxSizerFlags(1).Expand());
@@ -52,7 +56,64 @@ void SearchResultWindow::Clear() {
 }
 
 void SearchResultWindow::AddPosition(wxString description, Position pos) {
-	result_list->Append(description << " (" << pos.x << "," << pos.y << "," << pos.z << ")", newd Position(pos));
+	uint16_t item_id = 0;
+	wxString item_name;
+	
+	// Extract the item ID from the description
+	size_t start = description.Find("(ID: ");
+	if (start != wxString::npos) {
+		start += 4;
+		size_t end = description.find(')', start);
+		if (end != wxString::npos) {
+			wxString id_str = description.SubString(start, end - 1);
+			long temp_id;
+			if (id_str.ToLong(&temp_id)) {
+				item_id = static_cast<uint16_t>(temp_id);
+				item_name = description.SubString(0, start - 5).Trim(); // Get name without ID
+				OutputDebugStringA(wxString::Format("Parsed item: %s with ID: %d\n", 
+					item_name, item_id).c_str());
+				
+				if (use_ignored_ids) {
+					if (std::find(ignored_ids.begin(), ignored_ids.end(), item_id) != ignored_ids.end()) {
+						OutputDebugStringA(wxString::Format("Skipping ignored ID: %d\n", item_id).c_str());
+						return;
+					}
+					
+					for (const auto& range : ignored_ranges) {
+						if (item_id >= range.first && item_id <= range.second) {
+							OutputDebugStringA(wxString::Format("Skipping ID in ignored range %d-%d: %d\n", 
+								range.first, range.second, item_id).c_str());
+							return;
+						}
+					}
+				}
+			}
+		}
+	}
+	
+	// If we couldn't parse an ID, try to get the item name directly
+	if (item_name.empty()) {
+		size_t space_pos = description.Find(' ');
+		if (space_pos != wxString::npos) {
+			item_name = description.SubString(0, space_pos - 1);
+		} else {
+			item_name = description;
+		}
+		OutputDebugStringA(wxString::Format("Using item name without ID: %s\n", item_name).c_str());
+	}
+	
+	// Format the display text
+	wxString display_text;
+	if (item_id > 0) {
+		display_text = wxString::Format("%s [ID: %d] at (%d,%d,%d)", 
+			item_name, item_id, pos.x, pos.y, pos.z);
+	} else {
+		display_text = wxString::Format("%s at (%d,%d,%d)", 
+			item_name, pos.x, pos.y, pos.z);
+	}
+	
+	result_list->Append(display_text, newd Position(pos));
+	OutputDebugStringA(wxString::Format("Added to result list: %s\n", display_text).c_str());
 }
 
 void SearchResultWindow::OnClickResult(wxCommandEvent& event) {
@@ -86,4 +147,45 @@ void SearchResultWindow::OnClickExport(wxCommandEvent& WXUNUSED(event)) {
 
 void SearchResultWindow::OnClickClear(wxCommandEvent& WXUNUSED(event)) {
 	Clear();
+}
+
+void SearchResultWindow::SetIgnoredIds(const wxString& ignored_ids_str, bool enable) {
+	OutputDebugStringA("SearchResultWindow::SetIgnoredIds called\n");
+	
+	use_ignored_ids = enable;
+	ignored_ids.clear();
+	ignored_ranges.clear();
+	
+	if (!enable) {
+		OutputDebugStringA("Ignored IDs disabled\n");
+		return;
+	}
+	
+	std::string input = as_lower_str(nstr(ignored_ids_str));
+	OutputDebugStringA(wxString::Format("Setting ignored IDs: %s\n", input).c_str());
+	
+	std::vector<std::string> parts = splitString(input, ',');
+	
+	for (const auto& part : parts) {
+		if (part.find('-') != std::string::npos) {
+			std::vector<std::string> range = splitString(part, '-');
+			if (range.size() == 2 && isInteger(range[0]) && isInteger(range[1])) {
+				uint16_t from = static_cast<uint16_t>(std::stoi(range[0]));
+				uint16_t to = static_cast<uint16_t>(std::stoi(range[1]));
+				if (from <= to) {
+					ignored_ranges.emplace_back(from, to);
+					OutputDebugStringA(wxString::Format("Added ignored range: %d-%d\n", from, to).c_str());
+				}
+			}
+		} else {
+			if (isInteger(part)) {
+				uint16_t id = static_cast<uint16_t>(std::stoi(part));
+				ignored_ids.push_back(id);
+				OutputDebugStringA(wxString::Format("Added ignored ID: %d\n", id).c_str());
+			}
+		}
+	}
+	
+	OutputDebugStringA(wxString::Format("Total ignored IDs: %zu, Total ranges: %zu\n", 
+		ignored_ids.size(), ignored_ranges.size()).c_str());
 }
