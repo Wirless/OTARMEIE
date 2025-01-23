@@ -214,7 +214,7 @@ FindItemDialog::FindItemDialog(wxWindow* parent, const wxString& title, bool onl
 	properties_box_sizer->Add(floor_change, 0, wxALL, 5);
 
 	// Add a tooltip explaining the states
-	wxString tooltip = "Click to cycle through states:\n [ ] Ignore this property\n [V] Must have this property\n[||] Must NOT have this property";
+	wxString tooltip = "Click to cycle through states:\n[ ] Ignore this property\n[V] Must have this property\n[-] Must NOT have this property";
 	for(wxCheckBox* checkbox : {unpassable, unmovable, block_missiles, block_pathfinder, readable, writeable, 
 		pickupable, stackable, rotatable, hangable, hook_east, hook_south, has_elevation, ignore_look, floor_change}) {
 		checkbox->SetToolTip(tooltip);
