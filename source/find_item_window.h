@@ -133,6 +133,14 @@ private:
 	uint16_t result_id;
 	bool only_pickupables;
 
+	wxCheckBox* ignore_ids_checkbox;
+	wxTextCtrl* ignore_ids_text;
+	
+	std::vector<uint16_t> ignored_ids;
+	std::vector<std::pair<uint16_t, uint16_t>> ignored_ranges;
+	
+	void ParseIgnoredIDs();
+
 	DECLARE_EVENT_TABLE()
 };
 

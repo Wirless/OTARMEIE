@@ -32,6 +32,7 @@
 #include "application.h"
 #include "common_windows.h"
 #include "positionctrl.h"
+#include "string_utils.h"
 
 #ifdef _MSC_VER
 	#pragma warning(disable : 4018) // signed/unsigned mismatch
@@ -1021,31 +1022,6 @@ void FindBrushDialog::OnClickOKInternal() {
 		}
 	}
 	EndModal(1);
-}
-
-
-std::vector<std::string> splitString(const std::string& str, char delimiter) {
-	std::vector<std::string> tokens;
-	std::stringstream ss(str);
-	std::string token;
-
-	while (std::getline(ss, token, delimiter)) {
-		tokens.push_back(token);
-	}
-
-	return tokens;
-}
-
-bool isInteger(const std::string& str) {
-	if (str.empty()) {
-		return false;
-	}
-	for (char ch : str) {
-		if (!std::isdigit(ch)) {
-			return false;
-		}
-	}
-	return true;
 }
 
 void FindBrushDialog::RefreshContentsInternal() {

@@ -220,6 +220,7 @@
     <ClCompile Include="..\..\source\find_item_window.cpp" />
     <ClCompile Include="..\..\source\light_drawer.cpp" />
     <ClCompile Include="..\..\source\replace_items_window.cpp" />
+    <ClCompile Include="..\..\source\string_utils.cpp" />
     <ClCompile Include="..\..\source\tileset_window.cpp" />
     <ClCompile Include="..\..\source\welcome_dialog.cpp" />
     <ClInclude Include="..\..\source\add_item_window.h" />
@@ -293,6 +294,7 @@
     <ClCompile Include="..\..\source\settings.cpp" />
     <ClInclude Include="..\..\source\spawn_brush.h" />
     <ClCompile Include="..\..\source\spawn_brush.cpp" />
+    <ClInclude Include="..\..\source\string_utils.h" />
     <ClInclude Include="..\..\source\table_brush.h" />
     <ClInclude Include="..\..\source\threads.h" />
     <ClInclude Include="..\..\source\graphics.h" />

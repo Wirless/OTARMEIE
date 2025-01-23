@@ -22,6 +22,14 @@
 #include "items.h"
 #include "brush.h"
 #include "raw_brush.h"
+#include <algorithm>    // For std::all_of
+#include <cctype>       // For std::isdigit
+#include <sstream>      // For std::istringstream
+#include <vector>
+#include <string>
+#include "string_utils.h"
+
+
 
 BEGIN_EVENT_TABLE(FindItemDialog, wxDialog)
 EVT_TIMER(wxID_ANY, FindItemDialog::OnInputTimer)
@@ -100,6 +108,20 @@ FindItemDialog::FindItemDialog(wxWindow* parent, const wxString& title, bool onl
 	range_box_sizer->Add(client_range_sizer, 0, wxEXPAND | wxALL, 5);
 
 	options_box_sizer->Add(range_box_sizer, 0, wxALL | wxEXPAND, 5);
+
+	// Ignored IDs Controls
+	wxStaticBoxSizer* ignored_ids_box_sizer = newd wxStaticBoxSizer(new wxStaticBox(this, wxID_ANY, "Ignored IDs"), wxVERTICAL);
+	
+	// Checkbox to enable ignoring IDs
+	ignore_ids_checkbox = newd wxCheckBox(ignored_ids_box_sizer->GetStaticBox(), wxID_ANY, "Enable Ignored IDs");
+	ignored_ids_box_sizer->Add(ignore_ids_checkbox, 0, wxALL, 5);
+	
+	// Text input for entering IDs to ignore
+	ignore_ids_text = newd wxTextCtrl(ignored_ids_box_sizer->GetStaticBox(), wxID_ANY, "", wxDefaultPosition, wxDefaultSize, 0);
+	ignore_ids_text->SetToolTip("Enter IDs to ignore, separated by commas. Use '-' for ranges (e.g., 1212,1241,1256-1261,3199-4222,5993,5959)");
+	ignored_ids_box_sizer->Add(ignore_ids_text, 0, wxALL | wxEXPAND, 5);
+	
+	options_box_sizer->Add(ignored_ids_box_sizer, 0, wxALL | wxEXPAND, 5);
 
 	// Add spacer
 	options_box_sizer->Add(0, 0, 1, wxEXPAND, 5);
@@ -348,6 +370,11 @@ void FindItemDialog::RefreshContentsInternal() {
 	items_list->Clear();
 	bool found_search_results = false;
 	
+	// Parse ignored IDs if the checkbox is checked
+	if (ignore_ids_checkbox->GetValue()) {
+		ParseIgnoredIDs();
+	}
+	
 	SearchMode selection = (SearchMode)options_radio_box->GetSelection();
 	if(selection == SearchMode::ServerIDs) {
 		if(use_range->GetValue()) {
@@ -358,6 +385,23 @@ void FindItemDialog::RefreshContentsInternal() {
 				if(items_list->GetItemCount() >= size_t(replace_size_spin->GetValue())) {
 					break;
 				}
+				
+				// Check if ID is ignored
+				bool is_ignored = false;
+				if (ignore_ids_checkbox->GetValue()) {
+					// Check individual ignored IDs
+					if (std::find(ignored_ids.begin(), ignored_ids.end(), id) != ignored_ids.end()) {
+						is_ignored = true;
+					}
+					// Check ignored ranges
+					for (const auto& range : ignored_ranges) {
+						if (id >= range.first && id <= range.second) {
+							is_ignored = true;
+							break;
+						}
+					}
+				}
+				if (is_ignored) continue;
 
 				ItemType& item = g_items[id];
 				if(item.id == 0) continue;
@@ -374,21 +418,36 @@ void FindItemDialog::RefreshContentsInternal() {
 			result_id = std::min(server_id_spin->GetValue(), 0xFFFF);
 			uint16_t serverID = static_cast<uint16_t>(result_id);
 			if(serverID <= g_items.getMaxID()) {
-				ItemType& item = g_items.getItemType(serverID);
-				RAWBrush* raw_brush = item.raw_brush;
-				if(raw_brush) {
-					if(only_pickupables) {
-						if(item.pickupable) {
+				// Check if ID is ignored
+				bool is_ignored = false;
+				if (ignore_ids_checkbox->GetValue()) {
+					if (std::find(ignored_ids.begin(), ignored_ids.end(), serverID) != ignored_ids.end()) {
+						is_ignored = true;
+					}
+					for (const auto& range : ignored_ranges) {
+						if (serverID >= range.first && serverID <= range.second) {
+							is_ignored = true;
+							break;
+						}
+					}
+				}
+				if (!is_ignored) {
+					ItemType& item = g_items.getItemType(serverID);
+					RAWBrush* raw_brush = item.raw_brush;
+					if(raw_brush) {
+						if(only_pickupables) {
+							if(item.pickupable) {
+								found_search_results = true;
+								items_list->AddBrush(raw_brush);
+							}
+						} else {
 							found_search_results = true;
 							items_list->AddBrush(raw_brush);
 						}
-					} else {
-						found_search_results = true;
-						items_list->AddBrush(raw_brush);
 					}
 				}
 			}
-
+			
 			if (invalid_item->GetValue()) {
 				found_search_results = true;
 			}
@@ -402,6 +461,21 @@ void FindItemDialog::RefreshContentsInternal() {
                 if (item.id == 0 || item.clientID < from_id || item.clientID > to_id) {
                     continue;
                 }
+
+                // Check if clientID is ignored
+                bool is_ignored = false;
+                if (ignore_ids_checkbox->GetValue()) {
+                    if (std::find(ignored_ids.begin(), ignored_ids.end(), item.clientID) != ignored_ids.end()) {
+                        is_ignored = true;
+                    }
+                    for (const auto& range : ignored_ranges) {
+                        if (item.clientID >= range.first && item.clientID <= range.second) {
+                            is_ignored = true;
+                            break;
+                        }
+                    }
+                }
+                if (is_ignored) continue;
 
                 RAWBrush* raw_brush = item.raw_brush;
                 if (!raw_brush) {
@@ -417,23 +491,39 @@ void FindItemDialog::RefreshContentsInternal() {
             }
         } else {
             uint16_t clientID = (uint16_t)client_id_spin->GetValue();
-            for (int id = 100; id <= g_items.getMaxID(); ++id) {
-                ItemType& item = g_items.getItemType(id);
-                if (item.id == 0 || item.clientID != clientID) {
-                    continue;
+            
+            // Check if clientID is ignored
+            bool is_ignored = false;
+            if (ignore_ids_checkbox->GetValue()) {
+                if (std::find(ignored_ids.begin(), ignored_ids.end(), clientID) != ignored_ids.end()) {
+                    is_ignored = true;
                 }
-
-                RAWBrush* raw_brush = item.raw_brush;
-                if (!raw_brush) {
-                    continue;
+                for (const auto& range : ignored_ranges) {
+                    if (clientID >= range.first && clientID <= range.second) {
+                        is_ignored = true;
+                        break;
+                    }
                 }
+            }
+            if (!is_ignored) {
+                for (int id = 100; id <= g_items.getMaxID(); ++id) {
+                    ItemType& item = g_items.getItemType(id);
+                    if (item.id == 0 || item.clientID != clientID) {
+                        continue;
+                    }
 
-                if (only_pickupables && !item.pickupable) {
-                    continue;
+                    RAWBrush* raw_brush = item.raw_brush;
+                    if (!raw_brush) {
+                        continue;
+                    }
+
+                    if (only_pickupables && !item.pickupable) {
+                        continue;
+                    }
+
+                    found_search_results = true;
+                    items_list->AddBrush(raw_brush);
                 }
-
-                found_search_results = true;
-                items_list->AddBrush(raw_brush);
             }
         }
 	} else if (selection == SearchMode::Names) {
@@ -576,3 +666,53 @@ void FindItemDialog::OnRefreshClick(wxCommandEvent& WXUNUSED(event)) {
 void FindItemDialog::OnReplaceSizeChange(wxCommandEvent& WXUNUSED(event)) {
 	g_settings.setInteger(Config::REPLACE_SIZE, replace_size_spin->GetValue());
 }
+
+void FindItemDialog::ParseIgnoredIDs() {
+	ignored_ids.clear();
+	ignored_ranges.clear();
+	
+	std::string input = as_lower_str(nstr(ignore_ids_text->GetValue()));
+	std::vector<std::string> parts = splitString(input, ',');
+	
+	for (const auto& part : parts) {
+		if (part.find('-') != std::string::npos) {
+			std::vector<std::string> range = splitString(part, '-');
+			if (range.size() == 2 && isInteger(range[0]) && isInteger(range[1])) {
+				uint16_t from = static_cast<uint16_t>(std::stoi(range[0]));
+				uint16_t to = static_cast<uint16_t>(std::stoi(range[1]));
+				if (from <= to) {
+					ignored_ranges.emplace_back(from, to);
+				}
+			}
+		} else {
+			if (isInteger(part)) {
+				uint16_t id = static_cast<uint16_t>(std::stoi(part));
+				ignored_ids.push_back(id);
+			}
+		}
+	}
+}
+
+namespace RME {
+
+// Helper function to split a string by a delimiter
+std::vector<std::string> splitString(const std::string& str, char delimiter) {
+    std::vector<std::string> tokens;
+    std::string token;
+    std::istringstream tokenStream(str);
+    while (std::getline(tokenStream, token, delimiter)) {
+        // Optionally trim whitespace from each token
+        token.erase(token.find_last_not_of(" \n\r\t")+1);
+        token.erase(0, token.find_first_not_of(" \n\r\t"));
+        tokens.push_back(token);
+    }
+    return tokens;
+}
+
+// Helper function to check if a string represents a valid integer
+bool isInteger(const std::string& s) {
+    if (s.empty()) return false;
+    return std::all_of(s.begin(), s.end(), ::isdigit);
+}
+
+} // namespace RME
