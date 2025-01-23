@@ -165,52 +165,60 @@ FindItemDialog::FindItemDialog(wxWindow* parent, const wxString& title, bool onl
 
 	wxStaticBoxSizer* properties_box_sizer = newd wxStaticBoxSizer(newd wxStaticBox(this, wxID_ANY, "Properties"), wxVERTICAL);
 
-	unpassable = newd wxCheckBox(properties_box_sizer->GetStaticBox(), wxID_ANY, "Unpassable", wxDefaultPosition, wxDefaultSize, 0);
+	// Create property checkboxes with 3-state support
+	unpassable = newd wxCheckBox(properties_box_sizer->GetStaticBox(), wxID_ANY, "Unpassable", wxDefaultPosition, wxDefaultSize, wxCHK_3STATE | wxCHK_ALLOW_3RD_STATE_FOR_USER);
 	properties_box_sizer->Add(unpassable, 0, wxALL, 5);
 
-	unmovable = newd wxCheckBox(properties_box_sizer->GetStaticBox(), wxID_ANY, "Unmovable", wxDefaultPosition, wxDefaultSize, 0);
+	unmovable = newd wxCheckBox(properties_box_sizer->GetStaticBox(), wxID_ANY, "Unmovable", wxDefaultPosition, wxDefaultSize, wxCHK_3STATE | wxCHK_ALLOW_3RD_STATE_FOR_USER);
 	properties_box_sizer->Add(unmovable, 0, wxALL, 5);
 
-	block_missiles = newd wxCheckBox(properties_box_sizer->GetStaticBox(), wxID_ANY, "Block Missiles", wxDefaultPosition, wxDefaultSize, 0);
+	block_missiles = newd wxCheckBox(properties_box_sizer->GetStaticBox(), wxID_ANY, "Block Missiles", wxDefaultPosition, wxDefaultSize, wxCHK_3STATE | wxCHK_ALLOW_3RD_STATE_FOR_USER);
 	properties_box_sizer->Add(block_missiles, 0, wxALL, 5);
 
-	block_pathfinder = newd wxCheckBox(properties_box_sizer->GetStaticBox(), wxID_ANY, "Block Pathfinder", wxDefaultPosition, wxDefaultSize, 0);
+	block_pathfinder = newd wxCheckBox(properties_box_sizer->GetStaticBox(), wxID_ANY, "Block Pathfinder", wxDefaultPosition, wxDefaultSize, wxCHK_3STATE | wxCHK_ALLOW_3RD_STATE_FOR_USER);
 	properties_box_sizer->Add(block_pathfinder, 0, wxALL, 5);
 
-	readable = newd wxCheckBox(properties_box_sizer->GetStaticBox(), wxID_ANY, "Readable", wxDefaultPosition, wxDefaultSize, 0);
+	readable = newd wxCheckBox(properties_box_sizer->GetStaticBox(), wxID_ANY, "Readable", wxDefaultPosition, wxDefaultSize, wxCHK_3STATE | wxCHK_ALLOW_3RD_STATE_FOR_USER);
 	properties_box_sizer->Add(readable, 0, wxALL, 5);
 
-	writeable = newd wxCheckBox(properties_box_sizer->GetStaticBox(), wxID_ANY, "Writeable", wxDefaultPosition, wxDefaultSize, 0);
+	writeable = newd wxCheckBox(properties_box_sizer->GetStaticBox(), wxID_ANY, "Writeable", wxDefaultPosition, wxDefaultSize, wxCHK_3STATE | wxCHK_ALLOW_3RD_STATE_FOR_USER);
 	properties_box_sizer->Add(writeable, 0, wxALL, 5);
 
-	pickupable = newd wxCheckBox(properties_box_sizer->GetStaticBox(), wxID_ANY, "Pickupable", wxDefaultPosition, wxDefaultSize, 0);
-	pickupable->SetValue(only_pickupables);
+	pickupable = newd wxCheckBox(properties_box_sizer->GetStaticBox(), wxID_ANY, "Pickupable", wxDefaultPosition, wxDefaultSize, wxCHK_3STATE | wxCHK_ALLOW_3RD_STATE_FOR_USER);
+	pickupable->Set3StateValue(only_pickupables ? wxCHK_CHECKED : wxCHK_UNCHECKED);
 	pickupable->Enable(!only_pickupables);
 	properties_box_sizer->Add(pickupable, 0, wxALL, 5);
 
-	stackable = newd wxCheckBox(properties_box_sizer->GetStaticBox(), wxID_ANY, "Stackable", wxDefaultPosition, wxDefaultSize, 0);
+	stackable = newd wxCheckBox(properties_box_sizer->GetStaticBox(), wxID_ANY, "Stackable", wxDefaultPosition, wxDefaultSize, wxCHK_3STATE | wxCHK_ALLOW_3RD_STATE_FOR_USER);
 	properties_box_sizer->Add(stackable, 0, wxALL, 5);
 
-	rotatable = newd wxCheckBox(properties_box_sizer->GetStaticBox(), wxID_ANY, "Rotatable", wxDefaultPosition, wxDefaultSize, 0);
+	rotatable = newd wxCheckBox(properties_box_sizer->GetStaticBox(), wxID_ANY, "Rotatable", wxDefaultPosition, wxDefaultSize, wxCHK_3STATE | wxCHK_ALLOW_3RD_STATE_FOR_USER);
 	properties_box_sizer->Add(rotatable, 0, wxALL, 5);
 
-	hangable = newd wxCheckBox(properties_box_sizer->GetStaticBox(), wxID_ANY, "Hangable", wxDefaultPosition, wxDefaultSize, 0);
+	hangable = newd wxCheckBox(properties_box_sizer->GetStaticBox(), wxID_ANY, "Hangable", wxDefaultPosition, wxDefaultSize, wxCHK_3STATE | wxCHK_ALLOW_3RD_STATE_FOR_USER);
 	properties_box_sizer->Add(hangable, 0, wxALL, 5);
 
-	hook_east = newd wxCheckBox(properties_box_sizer->GetStaticBox(), wxID_ANY, "Hook East", wxDefaultPosition, wxDefaultSize, 0);
+	hook_east = newd wxCheckBox(properties_box_sizer->GetStaticBox(), wxID_ANY, "Hook East", wxDefaultPosition, wxDefaultSize, wxCHK_3STATE | wxCHK_ALLOW_3RD_STATE_FOR_USER);
 	properties_box_sizer->Add(hook_east, 0, wxALL, 5);
 
-	hook_south = newd wxCheckBox(properties_box_sizer->GetStaticBox(), wxID_ANY, "Hook South", wxDefaultPosition, wxDefaultSize, 0);
+	hook_south = newd wxCheckBox(properties_box_sizer->GetStaticBox(), wxID_ANY, "Hook South", wxDefaultPosition, wxDefaultSize, wxCHK_3STATE | wxCHK_ALLOW_3RD_STATE_FOR_USER);
 	properties_box_sizer->Add(hook_south, 0, wxALL, 5);
 
-	has_elevation = newd wxCheckBox(properties_box_sizer->GetStaticBox(), wxID_ANY, "Has Elevation", wxDefaultPosition, wxDefaultSize, 0);
+	has_elevation = newd wxCheckBox(properties_box_sizer->GetStaticBox(), wxID_ANY, "Has Elevation", wxDefaultPosition, wxDefaultSize, wxCHK_3STATE | wxCHK_ALLOW_3RD_STATE_FOR_USER);
 	properties_box_sizer->Add(has_elevation, 0, wxALL, 5);
 
-	ignore_look = newd wxCheckBox(properties_box_sizer->GetStaticBox(), wxID_ANY, "Ignore Look", wxDefaultPosition, wxDefaultSize, 0);
+	ignore_look = newd wxCheckBox(properties_box_sizer->GetStaticBox(), wxID_ANY, "Ignore Look", wxDefaultPosition, wxDefaultSize, wxCHK_3STATE | wxCHK_ALLOW_3RD_STATE_FOR_USER);
 	properties_box_sizer->Add(ignore_look, 0, wxALL, 5);
 
-	floor_change = newd wxCheckBox(properties_box_sizer->GetStaticBox(), wxID_ANY, "Floor Change", wxDefaultPosition, wxDefaultSize, 0);
+	floor_change = newd wxCheckBox(properties_box_sizer->GetStaticBox(), wxID_ANY, "Floor Change", wxDefaultPosition, wxDefaultSize, wxCHK_3STATE | wxCHK_ALLOW_3RD_STATE_FOR_USER);
 	properties_box_sizer->Add(floor_change, 0, wxALL, 5);
+
+	// Add a tooltip explaining the states
+	wxString tooltip = "Click to cycle through states:\n [ ] Ignore this property\n [V] Must have this property\n[||] Must NOT have this property";
+	for(wxCheckBox* checkbox : {unpassable, unmovable, block_missiles, block_pathfinder, readable, writeable, 
+		pickupable, stackable, rotatable, hangable, hook_east, hook_south, has_elevation, ignore_look, floor_change}) {
+		checkbox->SetToolTip(tooltip);
+	}
 
 	box_sizer->Add(properties_box_sizer, 1, wxALL | wxEXPAND, 5);
 
@@ -578,21 +586,55 @@ void FindItemDialog::RefreshContentsInternal() {
 			items_list->AddBrush(raw_brush);
 		}
 	} else if (selection == SearchMode::Properties) {
-		bool has_selected = (unpassable->GetValue() || unmovable->GetValue() || block_missiles->GetValue() || block_pathfinder->GetValue() || readable->GetValue() || writeable->GetValue() || pickupable->GetValue() || stackable->GetValue() || rotatable->GetValue() || hangable->GetValue() || hook_east->GetValue() || hook_south->GetValue() || has_elevation->GetValue() || ignore_look->GetValue() || floor_change->GetValue());
+		bool has_selected = false;
+		// Check if any checkbox is not in unchecked state
+		for(wxCheckBox* checkbox : {unpassable, unmovable, block_missiles, block_pathfinder, readable, writeable, 
+			pickupable, stackable, rotatable, hangable, hook_east, hook_south, has_elevation, ignore_look, floor_change}) {
+			if(checkbox->Get3StateValue() != wxCHK_UNCHECKED) {
+				has_selected = true;
+				break;
+			}
+		}
 
 		if (has_selected) {
 			for (int id = 100; id <= g_items.getMaxID(); ++id) {
 				ItemType& item = g_items.getItemType(id);
-				if (item.id == 0) {
-					continue;
-				}
+				if (item.id == 0) continue;
 
 				RAWBrush* raw_brush = item.raw_brush;
-				if (!raw_brush) {
-					continue;
-				}
+				if (!raw_brush) continue;
 
-				if ((unpassable->GetValue() && !item.unpassable) || (unmovable->GetValue() && item.moveable) || (block_missiles->GetValue() && !item.blockMissiles) || (block_pathfinder->GetValue() && !item.blockPathfinder) || (readable->GetValue() && !item.canReadText) || (writeable->GetValue() && !item.canWriteText) || (pickupable->GetValue() && !item.pickupable) || (stackable->GetValue() && !item.stackable) || (rotatable->GetValue() && !item.rotable) || (hangable->GetValue() && !item.isHangable) || (hook_east->GetValue() && !item.hookEast) || (hook_south->GetValue() && !item.hookSouth) || (has_elevation->GetValue() && !item.hasElevation) || (ignore_look->GetValue() && !item.ignoreLook) || (floor_change->GetValue() && !item.isFloorChange())) {
+				// Check each property considering all three states
+				if ((unpassable->Get3StateValue() == wxCHK_CHECKED && !item.unpassable) ||
+					(unpassable->Get3StateValue() == wxCHK_UNDETERMINED && item.unpassable) ||
+					(unmovable->Get3StateValue() == wxCHK_CHECKED && item.moveable) ||
+					(unmovable->Get3StateValue() == wxCHK_UNDETERMINED && !item.moveable) ||
+					(block_missiles->Get3StateValue() == wxCHK_CHECKED && !item.blockMissiles) ||
+					(block_missiles->Get3StateValue() == wxCHK_UNDETERMINED && item.blockMissiles) ||
+					(block_pathfinder->Get3StateValue() == wxCHK_CHECKED && !item.blockPathfinder) ||
+					(block_pathfinder->Get3StateValue() == wxCHK_UNDETERMINED && item.blockPathfinder) ||
+					(readable->Get3StateValue() == wxCHK_CHECKED && !item.canReadText) ||
+					(readable->Get3StateValue() == wxCHK_UNDETERMINED && item.canReadText) ||
+					(writeable->Get3StateValue() == wxCHK_CHECKED && !item.canWriteText) ||
+					(writeable->Get3StateValue() == wxCHK_UNDETERMINED && item.canWriteText) ||
+					(pickupable->Get3StateValue() == wxCHK_CHECKED && !item.pickupable) ||
+					(pickupable->Get3StateValue() == wxCHK_UNDETERMINED && item.pickupable) ||
+					(stackable->Get3StateValue() == wxCHK_CHECKED && !item.stackable) ||
+					(stackable->Get3StateValue() == wxCHK_UNDETERMINED && item.stackable) ||
+					(rotatable->Get3StateValue() == wxCHK_CHECKED && !item.rotable) ||
+					(rotatable->Get3StateValue() == wxCHK_UNDETERMINED && item.rotable) ||
+					(hangable->Get3StateValue() == wxCHK_CHECKED && !item.isHangable) ||
+					(hangable->Get3StateValue() == wxCHK_UNDETERMINED && item.isHangable) ||
+					(hook_east->Get3StateValue() == wxCHK_CHECKED && !item.hookEast) ||
+					(hook_east->Get3StateValue() == wxCHK_UNDETERMINED && item.hookEast) ||
+					(hook_south->Get3StateValue() == wxCHK_CHECKED && !item.hookSouth) ||
+					(hook_south->Get3StateValue() == wxCHK_UNDETERMINED && item.hookSouth) ||
+					(has_elevation->Get3StateValue() == wxCHK_CHECKED && !item.hasElevation) ||
+					(has_elevation->Get3StateValue() == wxCHK_UNDETERMINED && item.hasElevation) ||
+					(ignore_look->Get3StateValue() == wxCHK_CHECKED && !item.ignoreLook) ||
+					(ignore_look->Get3StateValue() == wxCHK_UNDETERMINED && item.ignoreLook) ||
+					(floor_change->Get3StateValue() == wxCHK_CHECKED && !item.floorChangeDown && !item.floorChangeNorth && !item.floorChangeSouth && !item.floorChangeEast && !item.floorChangeWest) ||
+					(floor_change->Get3StateValue() == wxCHK_UNDETERMINED && (item.floorChangeDown || item.floorChangeNorth || item.floorChangeSouth || item.floorChangeEast || item.floorChangeWest))) {
 					continue;
 				}
 
