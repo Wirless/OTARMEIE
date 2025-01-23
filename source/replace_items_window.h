@@ -122,6 +122,10 @@ public:
 	void OnRemoveButtonClicked(wxCommandEvent& event);
 	void OnExecuteButtonClicked(wxCommandEvent& event);
 	void OnCancelButtonClicked(wxCommandEvent& event);
+	void OnPresetButton(wxCommandEvent& event);
+	void OnSavePreset(wxCommandEvent& event);
+	void OnLoadPreset(wxCommandEvent& event);
+	void OnManagePresets(wxCommandEvent& event);
 
 	uint16_t getActualItemIdFromBrush(const Brush* brush) const;
 
@@ -137,7 +141,16 @@ private:
 	wxButton* remove_button;
 	wxButton* execute_button;
 	wxButton* close_button;
+	wxButton* preset_button;
+	wxMenu* preset_menu;
 	bool selectionOnly;
+
+	void SavePresetToXML(const wxString& name);
+	void LoadPresetFromXML(const wxString& path);
+
+	static const int ID_SAVE_PRESET = 1001;
+	static const int ID_LOAD_PRESET = 1002;
+	static const int ID_MANAGE_PRESETS = 1003;
 };
 
 #endif
