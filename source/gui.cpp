@@ -1402,7 +1402,7 @@ void GUI::SetDrawingMode() {
 
 			Editor* editor = mapTab->GetEditor();
 			editor->selection.start();
-			editor->selection.clear();
+			//editor->selection.clear();
 			editor->selection.finish();
 			al.insert(mapTab);
 		}
