@@ -65,13 +65,12 @@ public:
 	void MarkAsComplete(const ReplacingItem& item, uint32_t total);
 	void RemoveSelected();
 	bool CanAdd(uint16_t replaceId, uint16_t withId) const;
+	const std::vector<ReplacingItem>& GetItems() const { return m_items; }
+	void Clear();
 
-	void OnDrawItem(wxDC& dc, const wxRect& rect, size_t index) const;
-	wxCoord OnMeasureItem(size_t index) const;
+	void OnDrawItem(wxDC& dc, const wxRect& rect, size_t index) const override;
+	wxCoord OnMeasureItem(size_t index) const override;
 
-	const std::vector<ReplacingItem>& GetItems() const {
-		return m_items;
-	}
 	size_t GetCount() const {
 		return m_items.size();
 	}
@@ -145,8 +144,19 @@ private:
 	wxMenu* preset_menu;
 	bool selectionOnly;
 
+	wxChoice* preset_choice;
+	wxButton* add_preset_button;
+	wxButton* remove_preset_button;
+	wxButton* load_preset_button;
+
+	void OnPresetSelect(wxCommandEvent& event);
+	void OnAddPreset(wxCommandEvent& event);
+	void OnRemovePreset(wxCommandEvent& event);
+
+
 	void SavePresetToXML(const wxString& name);
-	void LoadPresetFromXML(const wxString& path);
+	void LoadPresetFromXML(const wxString& name);
+	void RefreshPresetList();
 
 	static const int ID_SAVE_PRESET = 1001;
 	static const int ID_LOAD_PRESET = 1002;

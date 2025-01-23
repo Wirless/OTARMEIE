@@ -26,6 +26,7 @@
 #include "ground_brush.h"
 #include "wall_brush.h"
 #include "doodad_brush.h"
+#include <wx/dir.h>
 
 // ============================================================================
 // ReplaceItemsButton
@@ -78,8 +79,8 @@ bool ReplaceItemsListBox::AddItem(const ReplacingItem& item) {
 		return false;
 	}
 
-	SetItemCount(GetItemCount() + 1);
 	m_items.push_back(item);
+	SetItemCount(m_items.size());
 	Refresh();
 
 	return true;
@@ -161,6 +162,13 @@ wxCoord ReplaceItemsListBox::OnMeasureItem(size_t WXUNUSED(index)) const {
 	return 40;
 }
 
+void ReplaceItemsListBox::Clear() {
+	m_items.clear();  // Clear the vector
+	SetItemCount(0);  // Reset the list count
+	Refresh();        // Force a visual refresh
+	Update();         // Force immediate update
+}
+
 // ============================================================================
 // ReplaceItemsDialog
 
@@ -204,37 +212,54 @@ ReplaceItemsDialog::ReplaceItemsDialog(wxWindow* parent, bool selectionOnly) :
 
 	sizer->Add(items_sizer, 1, wxALL | wxEXPAND, 5);
 
+	// Create main buttons row (Add, Remove, Execute, Close)
 	wxBoxSizer* buttons_sizer = new wxBoxSizer(wxHORIZONTAL);
-
-	// Add new preset menu button
-	preset_button = new wxButton(this, wxID_ANY, wxT("Presets"));
-	buttons_sizer->Add(preset_button, 0, wxALL, 5);
-
-	// Create preset menu
-	preset_menu = new wxMenu();
-	preset_menu->Append(ID_SAVE_PRESET, "Save Current List...");
-	preset_menu->Append(ID_LOAD_PRESET, "Load Preset...");
-	preset_menu->AppendSeparator();
-	preset_menu->Append(ID_MANAGE_PRESETS, "Manage Presets...");
 
 	add_button = new wxButton(this, wxID_ANY, wxT("Add"));
 	add_button->Enable(false);
 	buttons_sizer->Add(add_button, 0, wxALL, 5);
+	add_button->SetMinSize(wxSize(60, 30));
 
 	remove_button = new wxButton(this, wxID_ANY, wxT("Remove"));
 	remove_button->Enable(false);
 	buttons_sizer->Add(remove_button, 0, wxALL, 5);
+	remove_button->SetMinSize(wxSize(60, 30));
 
 	buttons_sizer->Add(0, 0, 1, wxEXPAND, 5);
 
 	execute_button = new wxButton(this, wxID_ANY, wxT("Execute"));
 	execute_button->Enable(false);
 	buttons_sizer->Add(execute_button, 0, wxALL, 5);
+	execute_button->SetMinSize(wxSize(60, 30));
 
 	close_button = new wxButton(this, wxID_ANY, wxT("Close"));
 	buttons_sizer->Add(close_button, 0, wxALL, 5);
+	close_button->SetMinSize(wxSize(60, 30));
 
 	sizer->Add(buttons_sizer, 1, wxALL | wxLEFT | wxRIGHT | wxSHAPED, 5);
+
+	// Add spacing between button rows
+	sizer->AddSpacer(10);
+
+	// Create preset controls row at the bottom
+	wxBoxSizer* preset_sizer = new wxBoxSizer(wxHORIZONTAL);
+	
+	// Create preset dropdown with increased height
+	preset_choice = new wxChoice(this, wxID_ANY, wxDefaultPosition, wxSize(150, 30));
+	preset_sizer->Add(preset_choice, 0, wxALL | wxALIGN_CENTER_VERTICAL, 5);
+	
+	// Add load button
+	load_preset_button = new wxButton(this, wxID_ANY, wxT("Load"), wxDefaultPosition, wxSize(60, 30));
+	preset_sizer->Add(load_preset_button, 0, wxALL | wxALIGN_CENTER_VERTICAL, 5);
+	
+	// Add preset management buttons with proper size
+	add_preset_button = new wxButton(this, wxID_ANY, wxT("Add Preset"), wxDefaultPosition, wxSize(100, 30));
+	preset_sizer->Add(add_preset_button, 0, wxALL | wxALIGN_CENTER_VERTICAL, 5);
+	
+	remove_preset_button = new wxButton(this, wxID_ANY, wxT("Remove Preset"), wxDefaultPosition, wxSize(100, 30));
+	preset_sizer->Add(remove_preset_button, 0, wxALL | wxALIGN_CENTER_VERTICAL, 5);
+	
+	sizer->Add(preset_sizer, 0, wxALL | wxCENTER, 5);
 
 	SetSizer(sizer);
 	Layout();
@@ -248,10 +273,13 @@ ReplaceItemsDialog::ReplaceItemsDialog(wxWindow* parent, bool selectionOnly) :
 	remove_button->Connect(wxEVT_COMMAND_BUTTON_CLICKED, wxCommandEventHandler(ReplaceItemsDialog::OnRemoveButtonClicked), NULL, this);
 	execute_button->Connect(wxEVT_COMMAND_BUTTON_CLICKED, wxCommandEventHandler(ReplaceItemsDialog::OnExecuteButtonClicked), NULL, this);
 	close_button->Connect(wxEVT_COMMAND_BUTTON_CLICKED, wxCommandEventHandler(ReplaceItemsDialog::OnCancelButtonClicked), NULL, this);
-	preset_button->Connect(wxEVT_BUTTON, wxCommandEventHandler(ReplaceItemsDialog::OnPresetButton), NULL, this);
-	preset_menu->Bind(wxEVT_MENU, &ReplaceItemsDialog::OnSavePreset, this, ID_SAVE_PRESET);
-	preset_menu->Bind(wxEVT_MENU, &ReplaceItemsDialog::OnLoadPreset, this, ID_LOAD_PRESET);
-	preset_menu->Bind(wxEVT_MENU, &ReplaceItemsDialog::OnManagePresets, this, ID_MANAGE_PRESETS);
+	preset_choice->Connect(wxEVT_CHOICE, wxCommandEventHandler(ReplaceItemsDialog::OnPresetSelect), NULL, this);
+	add_preset_button->Connect(wxEVT_BUTTON, wxCommandEventHandler(ReplaceItemsDialog::OnAddPreset), NULL, this);
+	remove_preset_button->Connect(wxEVT_BUTTON, wxCommandEventHandler(ReplaceItemsDialog::OnRemovePreset), NULL, this);
+	load_preset_button->Connect(wxEVT_BUTTON, wxCommandEventHandler(ReplaceItemsDialog::OnLoadPreset), NULL, this);
+
+	// Load initial preset list
+	RefreshPresetList();
 }
 
 ReplaceItemsDialog::~ReplaceItemsDialog() {
@@ -263,10 +291,9 @@ ReplaceItemsDialog::~ReplaceItemsDialog() {
 	remove_button->Disconnect(wxEVT_COMMAND_BUTTON_CLICKED, wxCommandEventHandler(ReplaceItemsDialog::OnRemoveButtonClicked), NULL, this);
 	execute_button->Disconnect(wxEVT_COMMAND_BUTTON_CLICKED, wxCommandEventHandler(ReplaceItemsDialog::OnExecuteButtonClicked), NULL, this);
 	close_button->Disconnect(wxEVT_COMMAND_BUTTON_CLICKED, wxCommandEventHandler(ReplaceItemsDialog::OnCancelButtonClicked), NULL, this);
-	preset_button->Disconnect(wxEVT_BUTTON, wxCommandEventHandler(ReplaceItemsDialog::OnPresetButton), NULL, this);
-	preset_menu->Unbind(wxEVT_MENU, &ReplaceItemsDialog::OnSavePreset, this, ID_SAVE_PRESET);
-	preset_menu->Unbind(wxEVT_MENU, &ReplaceItemsDialog::OnLoadPreset, this, ID_LOAD_PRESET);
-	preset_menu->Unbind(wxEVT_MENU, &ReplaceItemsDialog::OnManagePresets, this, ID_MANAGE_PRESETS);
+	preset_choice->Disconnect(wxEVT_CHOICE, wxCommandEventHandler(ReplaceItemsDialog::OnPresetSelect), NULL, this);
+	add_preset_button->Disconnect(wxEVT_BUTTON, wxCommandEventHandler(ReplaceItemsDialog::OnAddPreset), NULL, this);
+	remove_preset_button->Disconnect(wxEVT_BUTTON, wxCommandEventHandler(ReplaceItemsDialog::OnRemovePreset), NULL, this);
 }
 
 void ReplaceItemsDialog::UpdateWidgets() {
@@ -408,10 +435,57 @@ void ReplaceItemsDialog::OnCancelButtonClicked(wxCommandEvent& WXUNUSED(event)) 
 	Close();
 }
 
-void ReplaceItemsDialog::OnPresetButton(wxCommandEvent& WXUNUSED(event)) {
-	wxPoint pos = preset_button->GetPosition();
-	pos.y += preset_button->GetSize().GetHeight();
-	PopupMenu(preset_menu, pos);
+void ReplaceItemsDialog::RefreshPresetList() {
+	wxString path = g_gui.GetDataDirectory() + "\\replace_presets\\";
+	if (!wxDirExists(path)) {
+		wxMkdir(path);
+	}
+	
+	preset_choice->Clear();
+	wxDir dir(path);
+	if (!dir.IsOpened()) return;
+	
+	wxString filename;
+	bool cont = dir.GetFirst(&filename, "*.xml", wxDIR_FILES);
+	while (cont) {
+		preset_choice->Append(filename.BeforeLast('.'));
+		cont = dir.GetNext(&filename);
+	}
+	
+	remove_preset_button->Enable(preset_choice->GetCount() > 0);
+}
+
+void ReplaceItemsDialog::OnPresetSelect(wxCommandEvent& WXUNUSED(event)) {
+	int sel = preset_choice->GetSelection();
+	if (sel != wxNOT_FOUND) {
+		LoadPresetFromXML(preset_choice->GetString(sel));
+	}
+}
+
+void ReplaceItemsDialog::OnAddPreset(wxCommandEvent& WXUNUSED(event)) {
+	wxString name = wxGetTextFromUser("Enter preset name:", "Save Replace Items Preset");
+	if (!name.empty()) {
+		SavePresetToXML(name);
+		RefreshPresetList();
+		// Select the newly added preset
+		int idx = preset_choice->FindString(name);
+		if (idx != wxNOT_FOUND) {
+			preset_choice->SetSelection(idx);
+		}
+	}
+}
+
+void ReplaceItemsDialog::OnRemovePreset(wxCommandEvent& WXUNUSED(event)) {
+	int sel = preset_choice->GetSelection();
+	if (sel != wxNOT_FOUND) {
+		wxString name = preset_choice->GetString(sel);
+		if (wxMessageBox(wxString::Format("Are you sure you want to delete the preset '%s'?", name), 
+						"Confirm Delete", wxYES_NO | wxNO_DEFAULT) == wxYES) {
+			wxString path = g_gui.GetDataDirectory() + "\\replace_presets\\" + name + ".xml";
+			wxRemoveFile(path);
+			RefreshPresetList();
+		}
+	}
 }
 
 void ReplaceItemsDialog::SavePresetToXML(const wxString& name) {
@@ -433,44 +507,42 @@ void ReplaceItemsDialog::SavePresetToXML(const wxString& name) {
 	doc.save_file((path + name + ".xml").mb_str());
 }
 
-void ReplaceItemsDialog::LoadPresetFromXML(const wxString& path) {
+void ReplaceItemsDialog::LoadPresetFromXML(const wxString& name) {
+	wxString path = g_gui.GetDataDirectory() + "\\replace_presets\\" + name + ".xml";
+	
 	pugi::xml_document doc;
 	if (!doc.load_file(path.mb_str())) {
 		return;
 	}
 
-	list->Clear();
+	// Reset everything first
+	list->Clear();    // Clear the list (which will clear internal m_items)
+	replace_button->SetItemId(0);
+	with_button->SetItemId(0);
+	progress->SetValue(0);
 	
 	pugi::xml_node root = doc.child("replace_items");
 	for (pugi::xml_node replace_node = root.child("replace"); replace_node; replace_node = replace_node.next_sibling("replace")) {
 		ReplacingItem item;
 		item.replaceId = replace_node.attribute("replaceId").as_uint();
 		item.withId = replace_node.attribute("withId").as_uint();
-		list->AddItem(item);
+		item.complete = false;
+		item.total = 0;
+		if (item.replaceId != 0 && item.withId != 0) {  // Validate items before adding
+			list->AddItem(item);
+		}
 	}
 	
 	UpdateWidgets();
-}
-
-void ReplaceItemsDialog::OnSavePreset(wxCommandEvent& WXUNUSED(event)) {
-	wxString name = wxGetTextFromUser("Enter preset name:", "Save Replace Items Preset");
-	if (!name.empty()) {
-		SavePresetToXML(name);
-	}
+	list->Refresh();
+	list->Update();
 }
 
 void ReplaceItemsDialog::OnLoadPreset(wxCommandEvent& WXUNUSED(event)) {
-	wxString path = g_gui.GetDataDirectory() + "\\replace_presets\\";
-	wxFileDialog dialog(this, "Load Replace Items Preset", path, "",
-					   "XML files (*.xml)|*.xml", wxFD_OPEN | wxFD_FILE_MUST_EXIST);
-					   
-	if (dialog.ShowModal() == wxID_OK) {
-		LoadPresetFromXML(dialog.GetPath());
+	int sel = preset_choice->GetSelection();
+	if (sel != wxNOT_FOUND) {
+		LoadPresetFromXML(preset_choice->GetString(sel));
 	}
-}
-
-void ReplaceItemsDialog::OnManagePresets(wxCommandEvent& WXUNUSED(event)) {
-	// Implementation of managing presets
 }
 
 uint16_t ReplaceItemsDialog::getActualItemIdFromBrush(const Brush* brush) const {
