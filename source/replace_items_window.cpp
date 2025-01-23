@@ -165,7 +165,8 @@ wxCoord ReplaceItemsListBox::OnMeasureItem(size_t WXUNUSED(index)) const {
 // ReplaceItemsDialog
 
 ReplaceItemsDialog::ReplaceItemsDialog(wxWindow* parent, bool selectionOnly) :
-	wxDialog(parent, wxID_ANY, (selectionOnly ? "Replace Items on Selection" : "Replace Items"), wxDefaultPosition, wxSize(500, 480), wxDEFAULT_DIALOG_STYLE),
+	wxDialog(parent, wxID_ANY, (selectionOnly ? "Replace Items on Selection" : "Replace Items"), 
+		wxDefaultPosition, wxSize(500, 580), wxDEFAULT_DIALOG_STYLE),
 	selectionOnly(selectionOnly) {
 	SetSizeHints(wxDefaultSize, wxDefaultSize);
 
@@ -372,9 +373,16 @@ void ReplaceItemsDialog::OnExecuteButtonClicked(wxCommandEvent& WXUNUSED(event))
 		list->MarkAsComplete(info, total);
 	}
 
-	tab->Refresh();
+	// After execution is complete, re-enable all buttons
+	replace_button->Enable(true);
+	with_button->Enable(true);
+	add_button->Enable(false); // Stays disabled until valid items are selected
+	remove_button->Enable(false); // Stays disabled until an item is selected in list
+	execute_button->Enable(list->GetCount() != 0);
 	close_button->Enable(true);
-	UpdateWidgets();
+	UpdateWidgets(); // This will properly set button states based on current selection
+
+	tab->Refresh();
 }
 
 void ReplaceItemsDialog::OnCancelButtonClicked(wxCommandEvent& WXUNUSED(event)) {
