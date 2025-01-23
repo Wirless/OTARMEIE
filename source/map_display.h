@@ -188,6 +188,8 @@ private:
 	MapPopupMenu* popup_menu;
 	AnimationTimer* animation_timer;
 
+	bool show_fill_warning = true;
+
 	friend class MapDrawer;
 
 	DECLARE_EVENT_TABLE()

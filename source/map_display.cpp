@@ -2727,13 +2727,46 @@ void MapCanvas::OnFill(wxCommandEvent& WXUNUSED(event)) {
         return;
     }
 
-    // Show confirmation dialog first
-    int answer = g_gui.PopupDialog("Fill Area", 
-        "This operation might take a while if the area is large.\nDo you want to continue? [RME will freeze until it's done]",
-        wxYES_NO);
+    // Check if we should show the warning
+    if (show_fill_warning) {
+        wxDialog* dialog = new wxDialog(g_gui.root, wxID_ANY, "Fill Area", 
+            wxDefaultPosition, wxDefaultSize, wxDEFAULT_DIALOG_STYLE);
+            
+        wxBoxSizer* sizer = new wxBoxSizer(wxVERTICAL);
         
-    if (answer != wxID_YES) {
-        return;
+        // Add message text
+        wxStaticText* message = new wxStaticText(dialog, wxID_ANY, 
+            "This operation might take a while if the area is large.\nDo you want to continue?");
+        sizer->Add(message, 0, wxALL, 10);
+        
+        // Add checkbox
+        wxCheckBox* checkbox = new wxCheckBox(dialog, wxID_ANY, "Don't show this warning again");
+        sizer->Add(checkbox, 0, wxALL, 10);
+        
+        // Add buttons
+        wxBoxSizer* buttonSizer = new wxBoxSizer(wxHORIZONTAL);
+        wxButton* okButton = new wxButton(dialog, wxID_OK, "Continue");
+        wxButton* cancelButton = new wxButton(dialog, wxID_CANCEL, "Cancel");
+        buttonSizer->Add(okButton, 0, wxALL, 5);
+        buttonSizer->Add(cancelButton, 0, wxALL, 5);
+        sizer->Add(buttonSizer, 0, wxALIGN_CENTER | wxALL, 5);
+        
+        dialog->SetSizer(sizer);
+        sizer->Fit(dialog);
+        
+        int answer = dialog->ShowModal();
+        
+        if (answer != wxID_OK) {
+            dialog->Destroy();
+            return;
+        }
+        
+        // Save preference if checkbox was checked
+        if (checkbox->GetValue()) {
+            show_fill_warning = false;
+        }
+        
+        dialog->Destroy();
     }
 
     // Get cursor position
