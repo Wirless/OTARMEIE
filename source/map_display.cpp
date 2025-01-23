@@ -2727,85 +2727,64 @@ void MapCanvas::OnFill(wxCommandEvent& WXUNUSED(event)) {
         return;
     }
 
-    // Get cursor position instead of selection
+    // Show confirmation dialog first
+    int answer = g_gui.PopupDialog("Fill Area", 
+        "This operation might take a while if the area is large.\nDo you want to continue? [RME will freeze until it's done]",
+        wxYES_NO);
+        
+    if (answer != wxID_YES) {
+        return;
+    }
+
+    // Get cursor position
     int map_x, map_y;
     ScreenToMap(cursor_x, cursor_y, &map_x, &map_y);
     Position start(map_x, map_y, floor);
     
-    OutputDebugStringA(wxString::Format("Starting fill at cursor position: %d,%d,%d\n", 
-        start.x, start.y, start.z).c_str());
+    OutputDebugStringA("Validating fill area...\n");
 
-    // Rest of the fill logic remains the same
-    Position min_pos(start), max_pos(start);
-    std::queue<Position> to_fill;
-    std::set<Position> filled;
-    to_fill.push(start);
+    // Rest of your existing fill code...
+    std::queue<Position> to_check;
+    std::set<Position> checked;
+    to_check.push(start);
+    bool escape_found = false;
 
-    // Maximum allowed size for fill (prevent infinite fills)
-    const size_t MAX_FILL_SIZE = 10000;
+    while (!to_check.empty() && !escape_found) {
+        Position pos = to_check.front();
+        to_check.pop();
 
-    while (!to_fill.empty()) {
-        Position pos = to_fill.front();
-        to_fill.pop();
-
-        // Update min/max positions for debug output
-        min_pos.x = std::min(min_pos.x, pos.x);
-        min_pos.y = std::min(min_pos.y, pos.y);
-        max_pos.x = std::max(max_pos.x, pos.x);
-        max_pos.y = std::max(max_pos.y, pos.y);
-
-        // Skip if already filled
-        if (filled.count(pos) > 0) {
-            OutputDebugStringA(wxString::Format("Skipped already filled position: %d,%d,%d\n", 
-                pos.x, pos.y, pos.z).c_str());
-            continue;
-        }
+        if (checked.count(pos) > 0) continue;
+        checked.insert(pos);
 
         // Check if we're at map edge
         if (pos.x == 0 || pos.y == 0 || 
             pos.x >= editor.map.getWidth() || 
             pos.y >= editor.map.getHeight()) {
-            OutputDebugStringA("Fill reached map edge - aborting\n");
-            g_gui.PopupDialog("Warning", "Cannot fill - area is not fully enclosed.", wxOK);
-            return;
+            escape_found = true;
+            break;
         }
 
         // Get current tile
         Tile* tile = editor.map.getTile(pos);
-        
-        // Determine if the tile is empty based on UpdatePositionStatus logic
         bool is_empty = (!tile || 
                         (!tile->spawn || !g_settings.getInteger(Config::SHOW_SPAWNS)) && 
                         (!tile->creature || !g_settings.getInteger(Config::SHOW_CREATURES)) && 
                         !tile->getTopItem());
 
         // Skip if tile is not empty (boundary)
-        if (!is_empty) {
-            OutputDebugStringA(wxString::Format("Found boundary at: %d,%d,%d\n", 
-                pos.x, pos.y, pos.z).c_str());
-            continue;
-        }
+        if (!is_empty) continue;
 
-        // Check if we've exceeded maximum fill size
-        if (filled.size() > MAX_FILL_SIZE) {
-            OutputDebugStringA("Fill exceeded maximum size - aborting\n");
-            g_gui.PopupDialog("Warning", "Fill area too large - area may not be fully enclosed.", wxOK);
-            return;
-        }
-
-        // Add this position to be filled
-        filled.insert(pos);
-        OutputDebugStringA(wxString::Format("Added position to fill: %d,%d,%d\n", 
-            pos.x, pos.y, pos.z).c_str());
-
-        // Check all adjacent tiles
-        Position adjacent[4];
-        adjacent[0].x = pos.x + 1; adjacent[0].y = pos.y; adjacent[0].z = pos.z;
-        adjacent[1].x = pos.x - 1; adjacent[1].y = pos.y; adjacent[1].z = pos.z;
-        adjacent[2].x = pos.x; adjacent[2].y = pos.y + 1; adjacent[2].z = pos.z;
-        adjacent[3].x = pos.x; adjacent[3].y = pos.y - 1; adjacent[3].z = pos.z;
+        // Check adjacent tiles (only on same floor)
+        Position adjacent[4] = {
+            Position(pos.x + 1, pos.y, floor),
+            Position(pos.x - 1, pos.y, floor),
+            Position(pos.x, pos.y + 1, floor),
+            Position(pos.x, pos.y - 1, floor)
+        };
 
         for (const Position& next : adjacent) {
+            if (checked.count(next) > 0) continue;
+            
             Tile* next_tile = editor.map.getTile(next);
             bool next_is_empty = (!next_tile || 
                                 (!next_tile->spawn || !g_settings.getInteger(Config::SHOW_SPAWNS)) && 
@@ -2813,39 +2792,33 @@ void MapCanvas::OnFill(wxCommandEvent& WXUNUSED(event)) {
                                 !next_tile->getTopItem());
             
             if (next_is_empty) {
-                to_fill.push(next);
-                OutputDebugStringA(wxString::Format("Added to queue: %d,%d,%d\n", 
-                    next.x, next.y, next.z).c_str());
+                to_check.push(next);
             }
         }
     }
 
-    // Print final fill area dimensions
-    int width = max_pos.x - min_pos.x + 1;
-    int height = max_pos.y - min_pos.y + 1;
-    OutputDebugStringA(wxString::Format("Fill area dimensions: %dx%d\n", width, height).c_str());
-    OutputDebugStringA(wxString::Format("Fill area bounds: (%d,%d) to (%d,%d)\n", 
-        min_pos.x, min_pos.y, max_pos.x, max_pos.y).c_str());
-    OutputDebugStringA(wxString::Format("Total tiles to fill: %d\n", filled.size()).c_str());
-
-    // Perform the fill operation if we found enclosed empty tiles
-    if (!filled.empty()) {
-        Action* action = editor.actionQueue->createAction(ACTION_DRAW);
-        for (const Position& pos : filled) {
-            Tile* tile = editor.map.getTile(pos);
-            if (!tile) {
-                tile = editor.map.createTile(pos.x, pos.y, pos.z);
-            }
-            Tile* new_tile = tile->deepCopy(editor.map);
-            g_gui.GetCurrentBrush()->draw(&editor.map, new_tile, nullptr);
-            action->addChange(newd Change(new_tile));
-        }
-        editor.addAction(action);
-        g_gui.RefreshView();
-
-        OutputDebugStringA("Fill operation completed successfully.\n"); // Debug
-    } else {
-        OutputDebugStringA("No empty tiles found to fill.\n"); // Debug
-        g_gui.PopupDialog("Warning", "No empty tiles to fill in this enclosed area.", wxOK);
+    if (escape_found) {
+        OutputDebugStringA("Area not enclosed!\n");
+        g_gui.PopupDialog("Error", "Cannot fill - area is not enclosed.", wxOK);
+        return;
     }
+
+    // If we get here, the area is enclosed. Now we can safely fill it.
+    OutputDebugStringA(wxString::Format("Area is enclosed. Fill size: %d tiles\n", checked.size()).c_str());
+
+    // Perform the fill operation
+    Action* action = editor.actionQueue->createAction(ACTION_DRAW);
+    for (const Position& pos : checked) {
+        Tile* tile = editor.map.getTile(pos);
+        if (!tile) {
+            tile = editor.map.createTile(pos.x, pos.y, pos.z);
+        }
+        Tile* new_tile = tile->deepCopy(editor.map);
+        g_gui.GetCurrentBrush()->draw(&editor.map, new_tile, nullptr);
+        action->addChange(newd Change(new_tile));
+    }
+    editor.addAction(action);
+    g_gui.RefreshView();
+
+    OutputDebugStringA("Fill operation completed successfully.\n");
 }
