@@ -346,3 +346,19 @@ void MinimapWindow::ClearCache() {
 	m_blocks.clear();
 	needs_update = true;
 }
+
+void MinimapWindow::UpdateDrawnTiles(const PositionVector& positions) {
+	std::set<uint32_t> updatedBlocks;
+	
+	for(const Position& pos : positions) {
+		int blockX = pos.x / BLOCK_SIZE;
+		int blockY = pos.y / BLOCK_SIZE;
+		uint32_t index = getBlockIndex(blockX * BLOCK_SIZE, blockY * BLOCK_SIZE);
+		
+		if(updatedBlocks.insert(index).second) {
+			BlockPtr block = getBlock(blockX * BLOCK_SIZE, blockY * BLOCK_SIZE);
+			block->needsUpdate = true;
+		}
+	}
+	DelayedUpdate();
+}

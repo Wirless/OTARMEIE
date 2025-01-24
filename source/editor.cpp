@@ -38,6 +38,7 @@
 #include "live_server.h"
 #include "live_client.h"
 #include "live_action.h"
+#include "minimap_window.h"
 
 Editor::Editor(CopyBuffer& copybuffer) :
 	live_server(nullptr),
@@ -1540,6 +1541,30 @@ void Editor::drawInternal(Position offset, bool alt, bool dodraw) {
 		batch->addAndCommitAction(action);
 		addBatch(batch, 2);
 	}
+
+	// After drawing is complete, update minimap
+	if (g_gui.minimap) {
+		// For doodad brushes, collect modified positions
+		PositionVector drawnPositions;
+		
+		// Add all positions that were modified
+		if (brush->isDoodad()) {
+			BaseMap* buffer_map = g_gui.doodad_buffer_map;
+			Position delta_pos = offset - Position(0x8000, 0x8000, 0x8);
+			
+			for (MapIterator it = buffer_map->begin(); it != buffer_map->end(); ++it) {
+				Position pos = (*it)->getPosition() + delta_pos;
+				if (pos.isValid()) {
+					drawnPositions.push_back(pos);
+				}
+			}
+		}
+		
+		// Update minimap with modified positions
+		if (!drawnPositions.empty()) {
+			g_gui.minimap->UpdateDrawnTiles(drawnPositions);
+		}
+	}
 }
 
 void Editor::drawInternal(const PositionVector& tilestodraw, bool alt, bool dodraw) {
@@ -1606,6 +1631,11 @@ void Editor::drawInternal(const PositionVector& tilestodraw, bool alt, bool dodr
 		}
 	}
 	addAction(action, 2);
+
+	// After drawing is complete, update minimap
+	if (g_gui.minimap) {
+		g_gui.minimap->UpdateDrawnTiles(tilestodraw);
+	}
 }
 
 void Editor::drawInternal(const PositionVector& tilestodraw, PositionVector& tilestoborder, bool alt, bool dodraw) {
@@ -1890,6 +1920,26 @@ void Editor::drawInternal(const PositionVector& tilestodraw, PositionVector& til
 			}
 		}
 		addAction(action, 2);
+	}
+
+	if (g_gui.minimap && !tilestoborder.empty()) {
+		g_gui.minimap->UpdateDrawnTiles(tilestoborder);
+	}
+
+	// After drawing is complete, update minimap
+	if (g_gui.minimap) {
+		PositionVector allPositions;
+		
+		// Add drawn positions
+		allPositions.insert(allPositions.end(), tilestodraw.begin(), tilestodraw.end());
+		
+		// Add border positions
+		allPositions.insert(allPositions.end(), tilestoborder.begin(), tilestoborder.end());
+		
+		// Update minimap with all positions
+		if (!allPositions.empty()) {
+			g_gui.minimap->UpdateDrawnTiles(allPositions);
+		}
 	}
 }
 

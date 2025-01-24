@@ -18,11 +18,15 @@
 #ifndef RME_MINIMAP_WINDOW_H_
 #define RME_MINIMAP_WINDOW_H_
 
+#include "position.h"
+#include <wx/panel.h>
+#include <memory>
+#include <map>
 #include <thread>
 #include <mutex>
 #include <atomic>
-#include <unordered_map>
-#include <map>
+#include <wx/timer.h>
+#include <wx/pen.h>
 
 class MinimapWindow : public wxPanel {
 public:
@@ -45,7 +49,9 @@ public:
 
 	void ClearCache();
 
-	static const int BLOCK_SIZE = 256;  // Same as OTClient
+	void UpdateDrawnTiles(const PositionVector& positions);
+
+	static const int BLOCK_SIZE = 256;  // 256 IS most optimal 512 is too laggy and 64 is too small
 	
 	struct MinimapBlock {
 		wxBitmap bitmap;
@@ -57,17 +63,23 @@ public:
 	};
 	
 	using BlockPtr = std::shared_ptr<MinimapBlock>;
-	using BlockMap = std::unordered_map<uint32_t, BlockPtr>;
+	using BlockMap = std::map<uint32_t, BlockPtr>;
 
 	bool needs_update;
+
+	void MarkBlockForUpdate(int x, int y) {
+		if (auto block = getBlock(x, y)) {
+			block->needsUpdate = true;
+		}
+	}
 
 private:
 	BlockMap m_blocks;
 	std::mutex m_mutex;
 	
 	// Helper methods
-	uint32_t getBlockIndex(int x, int y) {
-		return ((y / BLOCK_SIZE) * (65536 / BLOCK_SIZE)) + (x / BLOCK_SIZE);
+	uint32_t getBlockIndex(int x, int y) const {
+		return ((x / BLOCK_SIZE) * (65536 / BLOCK_SIZE)) + (y / BLOCK_SIZE);
 	}
 	
 	wxPoint getBlockOffset(int x, int y) {
