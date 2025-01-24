@@ -25,6 +25,10 @@
 #include "map_display.h"
 #include "minimap_window.h"
 
+#include <thread>
+#include <mutex>
+#include <atomic>
+
 BEGIN_EVENT_TABLE(MinimapWindow, wxPanel)
 EVT_LEFT_DOWN(MinimapWindow::OnMouseClick)
 EVT_SIZE(MinimapWindow::OnSize)
@@ -37,15 +41,127 @@ END_EVENT_TABLE()
 
 MinimapWindow::MinimapWindow(wxWindow* parent) :
 	wxPanel(parent, wxID_ANY, wxDefaultPosition, wxSize(205, 130)),
-	update_timer(this) {
+	update_timer(this) ,
+	thread_running(false),
+	needs_update(true),
+	last_center_x(0),
+	last_center_y(0),
+	last_floor(0),
+	last_start_x(0),
+	last_start_y(0)
+	{
 	for (int i = 0; i < 256; ++i) {
 		pens[i] = newd wxPen(wxColor(minimap_color[i].red, minimap_color[i].green, minimap_color[i].blue));
 	}
+	
+	// Bind the timer event
+	Bind(wxEVT_TIMER, &MinimapWindow::OnDelayedUpdate, this);
+	
+	StartRenderThread();
 }
 
 MinimapWindow::~MinimapWindow() {
+	StopRenderThread();
 	for (int i = 0; i < 256; ++i) {
 		delete pens[i];
+	}
+}
+
+void MinimapWindow::StartRenderThread() {
+	thread_running = true;
+	render_thread = std::thread(&MinimapWindow::RenderThreadFunction, this);
+}
+
+void MinimapWindow::StopRenderThread() {
+	thread_running = false;
+	if(render_thread.joinable()) {
+		render_thread.join();
+	}
+}
+
+void MinimapWindow::RenderThreadFunction() {
+	while(thread_running) {
+		if(needs_update && g_gui.IsEditorOpen()) {
+			Editor& editor = *g_gui.GetCurrentEditor();
+			MapCanvas* canvas = g_gui.GetCurrentMapTab()->GetCanvas();
+			
+			int center_x, center_y;
+			canvas->GetScreenCenter(&center_x, &center_y);
+			int floor = g_gui.GetCurrentFloor();
+			
+			// Only render if something changed
+			if(center_x != last_center_x || 
+			   center_y != last_center_y || 
+			   floor != last_floor) {
+				
+				int window_width = GetSize().GetWidth();
+				int window_height = GetSize().GetHeight();
+				
+				// Create temporary bitmap
+				wxBitmap temp_buffer(window_width, window_height);
+				wxMemoryDC dc(temp_buffer);
+				
+				dc.SetBackground(*wxBLACK_BRUSH);
+				dc.Clear();
+				
+				int start_x = center_x - window_width / 2;
+				int start_y = center_y - window_height / 2;
+				
+				// Batch drawing by color
+				std::vector<std::vector<wxPoint>> colorPoints(256);
+				
+				for(int y = 0; y < window_height; ++y) {
+					for(int x = 0; x < window_width; ++x) {
+						int map_x = start_x + x;
+						int map_y = start_y + y;
+						
+						if(map_x >= 0 && map_y >= 0 && 
+						   map_x < editor.map.getWidth() && 
+						   map_y < editor.map.getHeight()) {
+							
+							Tile* tile = editor.map.getTile(map_x, map_y, floor);
+							if(tile) {
+								uint8_t color = tile->getMiniMapColor();
+								if(color) {
+									colorPoints[color].push_back(wxPoint(x, y));
+								}
+							}
+						}
+					}
+				}
+				
+				// Draw points by color
+				for(int color = 0; color < 256; ++color) {
+					if(!colorPoints[color].empty()) {
+						dc.SetPen(*pens[color]);
+						for(const wxPoint& pt : colorPoints[color]) {
+							dc.DrawPoint(pt.x, pt.y);
+						}
+					}
+				}
+				
+				// Update buffer safely
+				{
+					std::lock_guard<std::mutex> lock(buffer_mutex);
+					buffer = temp_buffer;
+				}
+				
+				// Store current state
+				last_center_x = center_x;
+				last_center_y = center_y;
+				last_floor = floor;
+				
+				// Request refresh of the window
+				wxCommandEvent evt(wxEVT_COMMAND_BUTTON_CLICKED);
+				evt.SetId(ID_MINIMAP_UPDATE);
+				wxPostEvent(this, evt);
+			}
+			
+			needs_update = false;
+		}
+		
+		// Sleep to prevent excessive CPU usage
+		std::this_thread::sleep_for(std::chrono::milliseconds(50));
 	}
 }
 
@@ -57,129 +173,75 @@ void MinimapWindow::OnClose(wxCloseEvent&) {
 	g_gui.DestroyMinimap();
 }
 
-void MinimapWindow::DelayedUpdate() {
-	// We only updated the window AFTER actions have taken place, that
-	// way we don't waste too much performance on updating this window
-	update_timer.Start(g_settings.getInteger(Config::MINIMAP_UPDATE_DELAY), true);
+void MinimapWindow::OnDelayedUpdate(wxTimerEvent& event) {
+	needs_update = true;
 }
 
-void MinimapWindow::OnDelayedUpdate(wxTimerEvent& event) {
-	Refresh();
+void MinimapWindow::DelayedUpdate() {
+	update_timer.Start(100, true);  // 100ms single-shot timer
 }
 
 void MinimapWindow::OnPaint(wxPaintEvent& event) {
-	wxBufferedPaintDC pdc(this);
-
-	pdc.SetBackground(*wxBLACK_BRUSH);
-	pdc.Clear();
-
-	if (!g_gui.IsEditorOpen()) {
-		return;
-	}
+	wxBufferedPaintDC dc(this);
+	dc.SetBackground(*wxBLACK_BRUSH);
+	dc.Clear();
+	
+	if (!g_gui.IsEditorOpen()) return;
+	
 	Editor& editor = *g_gui.GetCurrentEditor();
-
-	int window_width = GetSize().GetWidth();
-	int window_height = GetSize().GetHeight();
-	// printf("W:%d\tH:%d\n", window_width, window_height);
-	int center_x, center_y;
-
 	MapCanvas* canvas = g_gui.GetCurrentMapTab()->GetCanvas();
-	canvas->GetScreenCenter(&center_x, &center_y);
-
-	int start_x, start_y;
-	int end_x, end_y;
-	start_x = center_x - window_width / 2;
-	start_y = center_y - window_height / 2;
-
-	end_x = center_x + window_width / 2;
-	end_y = center_y + window_height / 2;
-
-	if (start_x < 0) {
-		start_x = 0;
-		end_x = window_width;
-	} else if (end_x > editor.map.getWidth()) {
-		start_x = editor.map.getWidth() - window_width;
-		end_x = editor.map.getWidth();
-	}
-	if (start_y < 0) {
-		start_y = 0;
-		end_y = window_height;
-	} else if (end_y > editor.map.getHeight()) {
-		start_y = editor.map.getHeight() - window_height;
-		end_y = editor.map.getHeight();
-	}
-
-	start_x = max(start_x, 0);
-	start_y = max(start_y, 0);
-	end_x = min(end_x, editor.map.getWidth());
-	end_y = min(end_y, editor.map.getHeight());
-
-	last_start_x = start_x;
-	last_start_y = start_y;
-
+	
+	int centerX, centerY;
+	canvas->GetScreenCenter(&centerX, &centerY);
 	int floor = g_gui.GetCurrentFloor();
-
-	// printf("Draw from %d:%d to %d:%d\n", start_x, start_y, end_x, end_y);
-	uint8_t last = 0;
-	if (g_gui.IsRenderingEnabled()) {
-		for (int y = start_y, window_y = 0; y <= end_y; ++y, ++window_y) {
-			for (int x = start_x, window_x = 0; x <= end_x; ++x, ++window_x) {
-				Tile* tile = editor.map.getTile(x, y, floor);
-				if (tile) {
-					uint8_t color = tile->getMiniMapColor();
-					if (color) {
-						if (last != color) {
-							pdc.SetPen(*pens[color]);
-							last = color;
-						}
-						pdc.DrawPoint(window_x, window_y);
-					}
-				}
+	
+	int windowWidth = GetSize().GetWidth();
+	int windowHeight = GetSize().GetHeight();
+	
+	// Calculate visible blocks
+	int startBlockX = (centerX - windowWidth/2) / BLOCK_SIZE;
+	int startBlockY = (centerY - windowHeight/2) / BLOCK_SIZE;
+	int endBlockX = (centerX + windowWidth/2) / BLOCK_SIZE + 1;
+	int endBlockY = (centerY + windowHeight/2) / BLOCK_SIZE + 1;
+	
+	// Draw visible blocks
+	for (int by = startBlockY; by <= endBlockY; ++by) {
+		for (int bx = startBlockX; bx <= endBlockX; ++bx) {
+			BlockPtr block = getBlock(bx * BLOCK_SIZE, by * BLOCK_SIZE);
+			if (block->needsUpdate) {
+				updateBlock(block, bx * BLOCK_SIZE, by * BLOCK_SIZE, floor);
 			}
-		}
-
-		if (g_settings.getInteger(Config::MINIMAP_VIEW_BOX)) {
-			pdc.SetPen(*wxWHITE_PEN);
-			// Draw the rectangle on the minimap
-
-			// Some view info
-			int screensize_x, screensize_y;
-			int view_scroll_x, view_scroll_y;
-
-			canvas->GetViewBox(&view_scroll_x, &view_scroll_y, &screensize_x, &screensize_y);
-
-			// bounds of the view
-			int view_start_x, view_start_y;
-			int view_end_x, view_end_y;
-
-			int tile_size = int(TileSize / canvas->GetZoom()); // after zoom
-
-			int floor_offset = (floor > GROUND_LAYER ? 0 : (GROUND_LAYER - floor));
-
-			view_start_x = view_scroll_x / TileSize + floor_offset;
-			view_start_y = view_scroll_y / TileSize + floor_offset;
-
-			view_end_x = view_start_x + screensize_x / tile_size + 1;
-			view_end_y = view_start_y + screensize_y / tile_size + 1;
-
-			for (int x = view_start_x; x <= view_end_x; ++x) {
-				pdc.DrawPoint(x - start_x, view_start_y - start_y);
-				pdc.DrawPoint(x - start_x, view_end_y - start_y);
-			}
-			for (int y = view_start_y; y < view_end_y; ++y) {
-				pdc.DrawPoint(view_start_x - start_x, y - start_y);
-				pdc.DrawPoint(view_end_x - start_x, y - start_y);
+			
+			if (block->wasSeen) {
+				int drawX = bx * BLOCK_SIZE - (centerX - windowWidth/2);
+				int drawY = by * BLOCK_SIZE - (centerY - windowHeight/2);
+				dc.DrawBitmap(block->bitmap, drawX, drawY, false);
 			}
 		}
 	}
 }
 
 void MinimapWindow::OnMouseClick(wxMouseEvent& event) {
-	if (!g_gui.IsEditorOpen()) {
+	if (!g_gui.IsEditorOpen())
 		return;
-	}
+
+	Editor& editor = *g_gui.GetCurrentEditor();
+	MapCanvas* canvas = g_gui.GetCurrentMapTab()->GetCanvas();
+	
+	int centerX, centerY;
+	canvas->GetScreenCenter(&centerX, &centerY);
+	
+	int windowWidth = GetSize().GetWidth();
+	int windowHeight = GetSize().GetHeight();
+	
+	// Calculate start positions like the original
+	last_start_x = centerX - (windowWidth / 2);
+	last_start_y = centerY - (windowHeight / 2);
+	
+	// Use the original click handling
 	int new_map_x = last_start_x + event.GetX();
 	int new_map_y = last_start_y + event.GetY();
+	
 	g_gui.SetScreenCenterPosition(Position(new_map_x, new_map_y, g_gui.GetCurrentFloor()));
 	Refresh();
 	g_gui.RefreshView();
@@ -189,4 +251,60 @@ void MinimapWindow::OnKey(wxKeyEvent& event) {
 	if (g_gui.GetCurrentTab() != nullptr) {
 		g_gui.GetCurrentMapTab()->GetEventHandler()->AddPendingEvent(event);
 	}
+}
+
+MinimapWindow::BlockPtr MinimapWindow::getBlock(int x, int y) {
+	std::lock_guard<std::mutex> lock(m_mutex);
+	uint32_t index = getBlockIndex(x, y);
+	
+	auto it = m_blocks.find(index);
+	if (it == m_blocks.end()) {
+		auto block = std::make_shared<MinimapBlock>();
+		m_blocks[index] = block;
+		return block;
+	}
+	return it->second;
+}
+
+void MinimapWindow::updateBlock(BlockPtr block, int startX, int startY, int floor) {
+	if (!block->needsUpdate) return;
+	
+	wxBitmap bitmap(BLOCK_SIZE, BLOCK_SIZE);
+	wxMemoryDC dc(bitmap);
+	dc.SetBackground(*wxBLACK_BRUSH);
+	dc.Clear();
+	
+	Editor& editor = *g_gui.GetCurrentEditor();
+	
+	// Batch drawing by color like OTClient
+	std::vector<std::vector<wxPoint>> colorPoints(256);
+	
+	for (int y = 0; y < BLOCK_SIZE; ++y) {
+		for (int x = 0; x < BLOCK_SIZE; ++x) {
+			int mapX = startX + x;
+			int mapY = startY + y;
+			
+			Tile* tile = editor.map.getTile(mapX, mapY, floor);
+			if (tile) {
+				uint8_t color = tile->getMiniMapColor();
+				if (color != 255) {  // Not transparent
+					colorPoints[color].push_back(wxPoint(x, y));
+				}
+			}
+		}
+	}
+	
+	// Draw all points of same color at once
+	for (int color = 0; color < 256; ++color) {
+		if (!colorPoints[color].empty()) {
+			dc.SetPen(*pens[color]);
+			for (const wxPoint& pt : colorPoints[color]) {
+				dc.DrawPoint(pt);
+			}
+		}
+	}
+	
+	block->bitmap = bitmap;
+	block->needsUpdate = false;
+	block->wasSeen = true;
 }
