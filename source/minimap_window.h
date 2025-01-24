@@ -45,7 +45,7 @@ public:
 
 	void ClearCache();
 
-	static const int BLOCK_SIZE = 64;  // Same as OTClient
+	static const int BLOCK_SIZE = 256;  // Same as OTClient
 	
 	struct MinimapBlock {
 		wxBitmap bitmap;
