@@ -46,9 +46,8 @@ public:
 	
 	struct MinimapBlock {
 		wxBitmap bitmap;
-		bool needsUpdate = true;
-		bool wasSeen = false;
-		int floor = -1;
+		bool needsUpdate;
+		bool wasSeen;
 		
 		MinimapBlock() : needsUpdate(true), wasSeen(false) {}
 	};

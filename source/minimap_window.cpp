@@ -89,18 +89,7 @@ void MinimapWindow::RenderThreadFunction() {
 			canvas->GetScreenCenter(&center_x, &center_y);
 			int floor = g_gui.GetCurrentFloor();
 			
-			// Force update if floor changed
-			if(floor != last_floor) {
-				// Clear the buffer when floor changes
-				std::lock_guard<std::mutex> lock(buffer_mutex);
-				buffer = wxBitmap(GetSize().GetWidth(), GetSize().GetHeight());
-				
-				// Clear block cache
-				std::lock_guard<std::mutex> blockLock(m_mutex);
-				m_blocks.clear();
-			}
-			
-			// Always update if floor changed or position changed
+			// Only render if something changed
 			if(center_x != last_center_x || 
 			   center_y != last_center_y || 
 			   floor != last_floor) {
@@ -206,16 +195,6 @@ void MinimapWindow::OnPaint(wxPaintEvent& event) {
 	canvas->GetScreenCenter(&centerX, &centerY);
 	int floor = g_gui.GetCurrentFloor();
 	
-	// Trigger update if floor changed
-	if (floor != last_floor) {
-		needs_update = true;
-		last_floor = floor;
-		
-		// Clear block cache when floor changes
-		std::lock_guard<std::mutex> lock(m_mutex);
-		m_blocks.clear();
-	}
-
 	int windowWidth = GetSize().GetWidth();
 	int windowHeight = GetSize().GetHeight();
 	
@@ -288,13 +267,6 @@ MinimapWindow::BlockPtr MinimapWindow::getBlock(int x, int y) {
 }
 
 void MinimapWindow::updateBlock(BlockPtr block, int startX, int startY, int floor) {
-	Editor& editor = *g_gui.GetCurrentEditor();
-	
-	// Always update if the block's floor doesn't match current floor
-	if (!block->needsUpdate && block->floor != floor) {
-		block->needsUpdate = true;
-	}
-	
 	if (!block->needsUpdate) return;
 	
 	wxBitmap bitmap(BLOCK_SIZE, BLOCK_SIZE);
@@ -302,8 +274,7 @@ void MinimapWindow::updateBlock(BlockPtr block, int startX, int startY, int floo
 	dc.SetBackground(*wxBLACK_BRUSH);
 	dc.Clear();
 	
-	// Store the floor this block was rendered for
-	block->floor = floor;
+	Editor& editor = *g_gui.GetCurrentEditor();
 	
 	// Batch drawing by color like OTClient
 	std::vector<std::vector<wxPoint>> colorPoints(256);
