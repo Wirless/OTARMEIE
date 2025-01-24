@@ -48,7 +48,6 @@
 #include "raw_brush.h"
 #include "carpet_brush.h"
 #include "table_brush.h"
-#include "minimap_window.h"  // Add this include
 
 BEGIN_EVENT_TABLE(MapCanvas, wxGLCanvas)
 EVT_KEY_DOWN(MapCanvas::OnKeyDown)
@@ -1615,7 +1614,6 @@ void MapCanvas::OnKeyDown(wxKeyEvent& event) {
 
 			static_cast<MapWindow*>(GetParent())->Scroll(start_x, int(start_y - TileSize * tiles * zoom));
 			UpdatePositionStatus();
-			g_gui.UpdateMinimap(true);  // Add immediate update
 			Refresh();
 			break;
 		}
@@ -1633,7 +1631,6 @@ void MapCanvas::OnKeyDown(wxKeyEvent& event) {
 
 			static_cast<MapWindow*>(GetParent())->Scroll(start_x, int(start_y + TileSize * tiles * zoom));
 			UpdatePositionStatus();
-			g_gui.UpdateMinimap(true);  // Add immediate update
 			Refresh();
 			break;
 		}
@@ -1651,7 +1648,6 @@ void MapCanvas::OnKeyDown(wxKeyEvent& event) {
 
 			static_cast<MapWindow*>(GetParent())->Scroll(int(start_x - TileSize * tiles * zoom), start_y);
 			UpdatePositionStatus();
-			g_gui.UpdateMinimap(true);  // Add immediate update
 			Refresh();
 			break;
 		}
@@ -1669,7 +1665,6 @@ void MapCanvas::OnKeyDown(wxKeyEvent& event) {
 
 			static_cast<MapWindow*>(GetParent())->Scroll(int(start_x + TileSize * tiles * zoom), start_y);
 			UpdatePositionStatus();
-			g_gui.UpdateMinimap(true);  // Add immediate update
 			Refresh();
 			break;
 		}
@@ -2300,24 +2295,10 @@ void MapCanvas::ChangeFloor(int new_floor) {
 	ASSERT(new_floor >= 0 || new_floor < MAP_LAYERS);
 	int old_floor = floor;
 	floor = new_floor;
-	
-	// Force complete minimap refresh when crossing between underground and ground level
-	bool crossing_ground_level = (old_floor > GROUND_LAYER && new_floor <= GROUND_LAYER) || 
-							   (old_floor <= GROUND_LAYER && new_floor > GROUND_LAYER);
-	
 	if (old_floor != new_floor) {
 		UpdatePositionStatus();
 		g_gui.root->UpdateFloorMenu();
-		
-		if (crossing_ground_level) {
-			// Force complete refresh of minimap when crossing ground level boundary
-			if (g_gui.minimap) {  // Use direct access since it's public
-				g_gui.minimap->ClearCache();
-			}
-			g_gui.UpdateMinimap(true);
-		} else {
-			g_gui.UpdateMinimap(true);
-		}
+		g_gui.UpdateMinimap(true);
 	}
 	Refresh();
 }

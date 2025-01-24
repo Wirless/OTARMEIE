@@ -22,7 +22,6 @@
 #include <mutex>
 #include <atomic>
 #include <unordered_map>
-#include <map>
 
 class MinimapWindow : public wxPanel {
 public:
@@ -43,8 +42,6 @@ public:
 	void OnDelayedUpdate(wxTimerEvent& event);
 	void OnKey(wxKeyEvent& event);
 
-	void ClearCache();
-
 	static const int BLOCK_SIZE = 64;  // Same as OTClient
 	
 	struct MinimapBlock {
@@ -58,8 +55,6 @@ public:
 	
 	using BlockPtr = std::shared_ptr<MinimapBlock>;
 	using BlockMap = std::unordered_map<uint32_t, BlockPtr>;
-
-	bool needs_update;
 
 private:
 	BlockMap m_blocks;
@@ -81,7 +76,7 @@ private:
 	std::mutex buffer_mutex;
 	std::thread render_thread;
 	std::atomic<bool> thread_running;
-
+	std::atomic<bool> needs_update;
 	
 	void RenderThreadFunction();
 	void StartRenderThread();

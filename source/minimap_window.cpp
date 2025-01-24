@@ -337,12 +337,3 @@ void MinimapWindow::updateBlock(BlockPtr block, int startX, int startY, int floo
 	block->needsUpdate = false;
 	block->wasSeen = true;
 }
-
-void MinimapWindow::ClearCache() {
-	std::lock_guard<std::mutex> lock(buffer_mutex);
-	buffer = wxBitmap(wxPanel::GetSize().GetWidth(), wxPanel::GetSize().GetHeight());
-	
-	std::lock_guard<std::mutex> blockLock(m_mutex);
-	m_blocks.clear();
-	needs_update = true;
-}
