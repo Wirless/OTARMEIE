@@ -18,17 +18,8 @@
 #ifndef RME_MINIMAP_WINDOW_H_
 #define RME_MINIMAP_WINDOW_H_
 
-#include <thread>
-#include <mutex>
-#include <atomic>
-#include <unordered_map>
-
 class MinimapWindow : public wxPanel {
 public:
-	enum {
-		ID_MINIMAP_UPDATE = 45000  // Choose a number that won't conflict with other IDs
-	};
-
 	MinimapWindow(wxWindow* parent);
 	virtual ~MinimapWindow();
 
@@ -42,50 +33,7 @@ public:
 	void OnDelayedUpdate(wxTimerEvent& event);
 	void OnKey(wxKeyEvent& event);
 
-	static const int BLOCK_SIZE = 64;  // Same as OTClient
-	
-	struct MinimapBlock {
-		wxBitmap bitmap;
-		bool needsUpdate;
-		bool wasSeen;
-		
-		MinimapBlock() : needsUpdate(true), wasSeen(false) {}
-	};
-	
-	using BlockPtr = std::shared_ptr<MinimapBlock>;
-	using BlockMap = std::unordered_map<uint32_t, BlockPtr>;
-
-private:
-	BlockMap m_blocks;
-	std::mutex m_mutex;
-	
-	// Helper methods
-	uint32_t getBlockIndex(int x, int y) {
-		return ((y / BLOCK_SIZE) * (65536 / BLOCK_SIZE)) + (x / BLOCK_SIZE);
-	}
-	
-	wxPoint getBlockOffset(int x, int y) {
-		return wxPoint(x - x % BLOCK_SIZE, y - y % BLOCK_SIZE);
-	}
-	
-	BlockPtr getBlock(int x, int y);
-	void updateBlock(BlockPtr block, int startX, int startY, int floor);
-
-	wxBitmap buffer;
-	std::mutex buffer_mutex;
-	std::thread render_thread;
-	std::atomic<bool> thread_running;
-	std::atomic<bool> needs_update;
-	
-	void RenderThreadFunction();
-	void StartRenderThread();
-	void StopRenderThread();
-	
-	// Store last known state to detect changes
-	int last_center_x;
-	int last_center_y;
-	int last_floor;
-
+protected:
 	wxPen* pens[256];
 	wxTimer update_timer;
 	int last_start_x;
