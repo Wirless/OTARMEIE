@@ -495,6 +495,8 @@ public:
 		g_gui.EnableRendering();
 		acquired = false;
 	}
+
+	MinimapWindow* GetMinimapWindow() { return g_gui.minimap; }
 };
 
 /**
@@ -524,5 +526,7 @@ public:
 
 void SetWindowToolTip(wxWindow* a, const wxString& tip);
 void SetWindowToolTip(wxWindow* a, wxWindow* b, const wxString& tip);
+
+
 
 #endif
