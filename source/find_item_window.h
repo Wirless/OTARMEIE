@@ -53,7 +53,7 @@ public:
 	};
 
 	FindItemDialog(wxWindow* parent, const wxString& title, bool onlyPickupables = false);
-	~FindItemDialog();
+	virtual ~FindItemDialog();
 
 	Brush* getResult() const {
 		return result_brush;
@@ -76,7 +76,7 @@ public:
 
 	bool IsRemoveEnabled() const { return remove_found_items->GetValue(); }
 
-private:
+protected:
 	void EnableProperties(bool enable);
 	void RefreshContentsInternal();
 
@@ -91,6 +91,7 @@ private:
 	void OnClickCancel(wxCommandEvent& event);
 	void OnRefreshClick(wxCommandEvent& event);
 	void OnReplaceSizeChange(wxCommandEvent& event);
+	void OnClose(wxCloseEvent& event);
 
 	wxRadioBox* options_radio_box;
 
