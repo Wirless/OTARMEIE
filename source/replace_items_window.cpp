@@ -28,6 +28,31 @@
 #include "doodad_brush.h"
 #include <wx/dir.h>
 
+/*
+ * ! CURRENT TASK:
+ * Swap Functionality in Replace Items Dialog 
+ * ----------------------------------------
+ * The swap checkbox allows users to reverse the direction of item replacement.
+ * 
+ * Normal Operation (Unchecked):
+ * - replaceId -> withId
+ * - Example: If replacing item 100 with 200, it finds all items with ID 100 and changes them to 200
+ * 
+ * Reversed Operation (Checked):
+ * - withId -> replaceId 
+ * - Example: If replacing item 100 with 200, it finds all items with ID 200 and changes them to 100
+ * 
+ * Visual Feedback:
+ * - Arrow bitmap rotates 180 degrees when checked to indicate reversed direction
+ * - Helps users understand the current replacement direction
+ * 
+ * Implementation Notes:
+ * - Actual swap happens during execution, not in the UI
+ * - Preserves all item metadata and completion status
+ * - Integrated with the undo/redo system through action queue
+ * - Works with both single items and batch replacements
+ */
+
 // ============================================================================
 // ReplaceItemsButton
 
@@ -183,7 +208,7 @@ ReplaceItemsDialog::ReplaceItemsDialog(wxWindow* parent, bool selectionOnly) :
 	wxFlexGridSizer* list_sizer = new wxFlexGridSizer(0, 2, 0, 0);
 	list_sizer->SetFlexibleDirection(wxBOTH);
 	list_sizer->SetNonFlexibleGrowMode(wxFLEX_GROWMODE_SPECIFIED);
-	list_sizer->SetMinSize(wxSize(-1, 300));
+	list_sizer->SetMinSize(wxSize(25, 300));
 
 	list = new ReplaceItemsListBox(this);
 	list->SetMinSize(wxSize(480, 320));
@@ -225,11 +250,18 @@ ReplaceItemsDialog::ReplaceItemsDialog(wxWindow* parent, bool selectionOnly) :
 	buttons_sizer->Add(remove_button, 0, wxALL, 5);
 	remove_button->SetMinSize(wxSize(60, 30));
 
-    buttons_sizer->Add(0, 0, 1, wxEXPAND, 5);
-	swap_button = new wxButton(this, wxID_ANY, wxT("Swap"));
-	swap_button->Enable(false);
-	buttons_sizer->Add(swap_button, 0, wxALL, 5);
-	swap_button->SetMinSize(wxSize(60, 30));
+	buttons_sizer->Add(0, 0, 1, wxEXPAND, 5);
+
+	// Create a static box for the swap checkbox with increased size
+	wxStaticBoxSizer* swap_box = new wxStaticBoxSizer(new wxStaticBox(this, wxID_ANY, "Swap <-->"), wxVERTICAL);
+	swap_box->GetStaticBox()->SetMinSize(wxSize(140, 60)); // Increased box size
+
+	// Add checkbox with better spacing and positioning, but no text
+	swap_checkbox = new wxCheckBox(swap_box->GetStaticBox(), wxID_ANY, "");
+	swap_box->Add(swap_checkbox, 0, wxALL | wxALIGN_CENTER, 10); // Increased padding
+
+	// Add it to the buttons_sizer before the execute button
+	buttons_sizer->Add(swap_box, 0, wxALL | wxALIGN_CENTER_VERTICAL, 5);
 
 	execute_button = new wxButton(this, wxID_ANY, wxT("Execute"));
 	execute_button->Enable(false);
@@ -281,7 +313,7 @@ ReplaceItemsDialog::ReplaceItemsDialog(wxWindow* parent, bool selectionOnly) :
 	add_preset_button->Connect(wxEVT_BUTTON, wxCommandEventHandler(ReplaceItemsDialog::OnAddPreset), NULL, this);
 	remove_preset_button->Connect(wxEVT_BUTTON, wxCommandEventHandler(ReplaceItemsDialog::OnRemovePreset), NULL, this);
 	load_preset_button->Connect(wxEVT_BUTTON, wxCommandEventHandler(ReplaceItemsDialog::OnLoadPreset), NULL, this);
-	swap_button->Connect(wxEVT_COMMAND_BUTTON_CLICKED, wxCommandEventHandler(ReplaceItemsDialog::OnSwapButtonClicked), NULL, this);
+	swap_checkbox->Connect(wxEVT_CHECKBOX, wxCommandEventHandler(ReplaceItemsDialog::OnSwapCheckboxClicked), NULL, this);
 
 	// Load initial preset list
 	RefreshPresetList();
@@ -300,7 +332,7 @@ ReplaceItemsDialog::~ReplaceItemsDialog() {
 	add_preset_button->Disconnect(wxEVT_BUTTON, wxCommandEventHandler(ReplaceItemsDialog::OnAddPreset), NULL, this);
 	remove_preset_button->Disconnect(wxEVT_BUTTON, wxCommandEventHandler(ReplaceItemsDialog::OnRemovePreset), NULL, this);
 	load_preset_button->Disconnect(wxEVT_BUTTON, wxCommandEventHandler(ReplaceItemsDialog::OnLoadPreset), NULL, this);
-	swap_button->Disconnect(wxEVT_COMMAND_BUTTON_CLICKED, wxCommandEventHandler(ReplaceItemsDialog::OnSwapButtonClicked), NULL, this);
+	swap_checkbox->Disconnect(wxEVT_CHECKBOX, wxCommandEventHandler(ReplaceItemsDialog::OnSwapCheckboxClicked), NULL, this);
 }
 
 void ReplaceItemsDialog::UpdateWidgets() {
@@ -309,7 +341,6 @@ void ReplaceItemsDialog::UpdateWidgets() {
 	add_button->Enable(list->CanAdd(replaceId, withId));
 	remove_button->Enable(list->GetCount() != 0 && list->GetSelection() != wxNOT_FOUND);
 	execute_button->Enable(list->GetCount() != 0);
-	swap_button->Enable(list->GetCount() != 0);
 }
 
 void ReplaceItemsDialog::OnListSelected(wxCommandEvent& WXUNUSED(event)) {
@@ -395,10 +426,15 @@ void ReplaceItemsDialog::OnExecuteButtonClicked(wxCommandEvent& WXUNUSED(event))
 	}
 
 	Editor* editor = tab->GetEditor();
+	bool isReversed = swap_checkbox->GetValue();
 
 	int done = 0;
 	for (const ReplacingItem& info : items) {
-		ItemFinder finder(info.replaceId, (uint32_t)g_settings.getInteger(Config::REPLACE_SIZE));
+		// If reversed, swap the IDs for the search
+		uint16_t searchId = isReversed ? info.withId : info.replaceId;
+		uint16_t replaceWithId = isReversed ? info.replaceId : info.withId;
+		
+		ItemFinder finder(searchId, (uint32_t)g_settings.getInteger(Config::REPLACE_SIZE));
 
 		// search on map
 		foreach_ItemOnMap(editor->map, finder, selectionOnly);
@@ -414,7 +450,7 @@ void ReplaceItemsDialog::OnExecuteButtonClicked(wxCommandEvent& WXUNUSED(event))
 				ASSERT(index != wxNOT_FOUND);
 				Item* item = new_tile->getItemAt(index);
 				ASSERT(item && item->getID() == rit->second->getID());
-				transformItem(item, info.withId, new_tile);
+				transformItem(item, replaceWithId, new_tile);
 				action->addChange(new Change(new_tile));
 				total++;
 			}
@@ -427,14 +463,14 @@ void ReplaceItemsDialog::OnExecuteButtonClicked(wxCommandEvent& WXUNUSED(event))
 		list->MarkAsComplete(info, total);
 	}
 
-	// After execution is complete, re-enable all buttons
+	// Re-enable all buttons
 	replace_button->Enable(true);
 	with_button->Enable(true);
 	add_button->Enable(false); // Stays disabled until valid items are selected
 	remove_button->Enable(false); // Stays disabled until an item is selected in list
 	execute_button->Enable(list->GetCount() != 0);
 	close_button->Enable(true);
-	UpdateWidgets(); // This will properly set button states based on current selection
+	UpdateWidgets();
 
 	tab->Refresh();
 }
@@ -443,25 +479,20 @@ void ReplaceItemsDialog::OnCancelButtonClicked(wxCommandEvent& WXUNUSED(event)) 
 	Close();
 }
 
-void ReplaceItemsDialog::OnSwapButtonClicked(wxCommandEvent& WXUNUSED(event)) {
-	// Get current items list and store them temporarily
-	std::vector<ReplacingItem> tempItems = list->GetItems(); // Make a copy!
-	if(tempItems.empty()) {
-		return;
+void ReplaceItemsDialog::OnSwapCheckboxClicked(wxCommandEvent& WXUNUSED(event)) {
+	if (arrow_bitmap) {
+		// Get the original bitmap from the art provider
+		wxBitmap original = wxArtProvider::GetBitmap(ART_POSITION_GO, wxART_TOOLBAR, wxSize(16, 16));
+		
+		// Create a rotated version using wxImage for the 180-degree rotation
+		wxImage img = original.ConvertToImage();
+		img = swap_checkbox->GetValue() ? 
+			img.Rotate180() :  // Flip it completely when checked
+			original.ConvertToImage();  // Use original when unchecked
+			
+		// Update the bitmap
+		arrow_bitmap->SetBitmap(wxBitmap(img));
 	}
-
-	// Clear current list
-	list->Clear();
-
-	// Add swapped items back
-	for(const ReplacingItem& item : tempItems) { // Use the temp copy
-		ReplacingItem swapped;
-		swapped.replaceId = item.withId;
-		swapped.withId = item.replaceId;
-		list->AddItem(swapped);
-	}
-
-	UpdateWidgets();
 }
 
 void ReplaceItemsDialog::RefreshPresetList() {
