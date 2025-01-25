@@ -870,11 +870,10 @@ namespace OnSearchForItem {
 	};
 
 	struct RangeFinder {
-		RangeFinder(uint16_t fromId, uint16_t toId) : 
-			fromId(fromId), toId(toId), maxCount((uint32_t)g_settings.getInteger(Config::REPLACE_SIZE)) { }
+		RangeFinder(const std::vector<std::pair<uint16_t, uint16_t>>& ranges) : 
+			ranges(ranges), maxCount((uint32_t)g_settings.getInteger(Config::REPLACE_SIZE)) { }
 			
-		uint16_t fromId;
-		uint16_t toId;
+		std::vector<std::pair<uint16_t, uint16_t>> ranges;
 		uint32_t maxCount;
 		std::vector<std::pair<Tile*, Item*>> result;
 		
@@ -889,8 +888,12 @@ namespace OnSearchForItem {
 				g_gui.SetLoadDone((unsigned int)(100 * done / map.getTileCount()));
 			}
 			
-			if(item->getID() >= fromId && item->getID() <= toId) {
-				result.push_back(std::make_pair(tile, item));
+			// Check if item ID is in any of our ranges
+			for(const auto& range : ranges) {
+				if(item->getID() >= range.first && item->getID() <= range.second) {
+					result.push_back(std::make_pair(tile, item));
+					break;
+				}
 			}
 		}
 	};
@@ -905,39 +908,27 @@ void MainMenuBar::OnSearchForItem(wxCommandEvent& WXUNUSED(event)) {
 	dialog.setSearchMode((FindItemDialog::SearchMode)g_settings.getInteger(Config::FIND_ITEM_MODE));
 	if (dialog.ShowModal() == wxID_OK) {
 		if (dialog.getUseRange()) {
-			OnSearchForItem::RangeFinder finder(dialog.getFromID(), dialog.getToID());
-			g_gui.CreateLoadBar("Searching map...");
-
-			foreach_ItemOnMap(g_gui.GetCurrentMap(), finder, false);
-			std::vector<std::pair<Tile*, Item*>>& result = finder.result;
-
-			g_gui.DestroyLoadBar();
-
-			if (finder.limitReached()) {
-				wxString msg;
-				msg << "The configured limit has been reached. Only " << finder.maxCount << " results will be displayed.";
-				g_gui.PopupDialog("Notice", msg, wxOK);
-			}
-
-			SearchResultWindow* window = g_gui.ShowSearchWindow();
-			window->Clear();
-
-			// Pass the ignored IDs configuration from the dialog
-			window->SetIgnoredIds(dialog.GetIgnoreIdsText(), dialog.IsIgnoreIdsEnabled());
-
-			for (std::vector<std::pair<Tile*, Item*>>::const_iterator iter = result.begin(); iter != result.end(); ++iter) {
-				Tile* tile = iter->first;
-				Item* item = iter->second;
+			auto ranges = dialog.ParseRangeString(dialog.GetRangeInput());
+			if (!ranges.empty()) {
+				OnSearchForItem::RangeFinder finder(ranges);
+				g_gui.CreateLoadBar("Searching map...");
 				
-				// Format description to include both name and ID
-				wxString description = wxString::Format("%s (ID: %d)", 
-					wxstr(item->getName()),
-					item->getID());
+				foreach_ItemOnMap(g_gui.GetCurrentMap(), finder, false);
+				std::vector<std::pair<Tile*, Item*>>& result = finder.result;
 				
-				OutputDebugStringA(wxString::Format("Adding search result: %s at pos(%d,%d,%d)\n", 
-					description, tile->getPosition().x, tile->getPosition().y, tile->getPosition().z).c_str());
+				g_gui.DestroyLoadBar();
 				
-				window->AddPosition(description, tile->getPosition());
+				if (finder.limitReached()) {
+					wxString msg;
+					msg << "The configured limit has been reached. Only " << finder.maxCount << " results will be displayed.";
+					g_gui.PopupDialog("Notice", msg, wxOK);
+				}
+				
+				SearchResultWindow* resultWindow = g_gui.ShowSearchWindow();
+				resultWindow->Clear();
+				for (const auto& pair : result) {
+					resultWindow->AddPosition(wxString::Format("Item %d", pair.second->getID()), pair.first->getPosition());
+				}
 			}
 		} else {
 			OnSearchForItem::Finder finder(dialog.getResultID(), (uint32_t)g_settings.getInteger(Config::REPLACE_SIZE));
@@ -1110,39 +1101,27 @@ void MainMenuBar::OnSearchForItemOnSelection(wxCommandEvent& WXUNUSED(event)) {
 	dialog.setSearchMode((FindItemDialog::SearchMode)g_settings.getInteger(Config::FIND_ITEM_MODE));
 	if (dialog.ShowModal() == wxID_OK) {
 		if (dialog.getUseRange()) {
-			OnSearchForItem::RangeFinder finder(dialog.getFromID(), dialog.getToID());
-			g_gui.CreateLoadBar("Searching on selected area...");
-
-			foreach_ItemOnMap(g_gui.GetCurrentMap(), finder, true);
-			std::vector<std::pair<Tile*, Item*>>& result = finder.result;
-
-			g_gui.DestroyLoadBar();
-
-			if (finder.limitReached()) {
-				wxString msg;
-				msg << "The configured limit has been reached. Only " << finder.maxCount << " results will be displayed.";
-				g_gui.PopupDialog("Notice", msg, wxOK);
-			}
-
-			SearchResultWindow* window = g_gui.ShowSearchWindow();
-			window->Clear();
-
-			// Pass the ignored IDs configuration from the dialog
-			window->SetIgnoredIds(dialog.GetIgnoreIdsText(), dialog.IsIgnoreIdsEnabled());
-
-			for (std::vector<std::pair<Tile*, Item*>>::const_iterator iter = result.begin(); iter != result.end(); ++iter) {
-				Tile* tile = iter->first;
-				Item* item = iter->second;
+			auto ranges = dialog.ParseRangeString(dialog.GetRangeInput());
+			if (!ranges.empty()) {
+				OnSearchForItem::RangeFinder finder(ranges);
+				g_gui.CreateLoadBar("Searching on selected area...");
 				
-				// Format description to include both name and ID
-				wxString description = wxString::Format("%s (ID: %d)", 
-					wxstr(item->getName()),
-					item->getID());
+				foreach_ItemOnMap(g_gui.GetCurrentMap(), finder, true);
+				std::vector<std::pair<Tile*, Item*>>& result = finder.result;
 				
-				OutputDebugStringA(wxString::Format("Adding search result: %s at pos(%d,%d,%d)\n", 
-					description, tile->getPosition().x, tile->getPosition().y, tile->getPosition().z).c_str());
+				g_gui.DestroyLoadBar();
 				
-				window->AddPosition(description, tile->getPosition());
+				if (finder.limitReached()) {
+					wxString msg;
+					msg << "The configured limit has been reached. Only " << finder.maxCount << " results will be displayed.";
+					g_gui.PopupDialog("Notice", msg, wxOK);
+				}
+				
+				SearchResultWindow* resultWindow = g_gui.ShowSearchWindow();
+				resultWindow->Clear();
+				for (const auto& pair : result) {
+					resultWindow->AddPosition(wxString::Format("Item %d", pair.second->getID()), pair.first->getPosition());
+				}
 			}
 		} else {
 			OnSearchForItem::Finder finder(dialog.getResultID(), (uint32_t)g_settings.getInteger(Config::REPLACE_SIZE));

@@ -86,27 +86,18 @@ FindItemDialog::FindItemDialog(wxWindow* parent, const wxString& title, bool onl
 
 	// Range controls
 	wxStaticBoxSizer* range_box_sizer = newd wxStaticBoxSizer(newd wxStaticBox(this, wxID_ANY, "ID Range"), wxVERTICAL);
-	
+
+	// Checkbox to enable range search
 	use_range = newd wxCheckBox(range_box_sizer->GetStaticBox(), wxID_ANY, "Search by Range", wxDefaultPosition, wxDefaultSize, 0);
 	range_box_sizer->Add(use_range, 0, wxALL, 5);
 
-	// Server ID range
-	wxBoxSizer* server_range_sizer = newd wxBoxSizer(wxHORIZONTAL);
-	server_id_from_spin = newd wxSpinCtrl(range_box_sizer->GetStaticBox(), wxID_ANY, wxEmptyString, wxDefaultPosition, wxDefaultSize, wxSP_ARROW_KEYS, 100, g_items.getMaxID(), 100);
-	server_id_to_spin = newd wxSpinCtrl(range_box_sizer->GetStaticBox(), wxID_ANY, wxEmptyString, wxDefaultPosition, wxDefaultSize, wxSP_ARROW_KEYS, 100, g_items.getMaxID(), 100);
-	server_range_sizer->Add(server_id_from_spin, 1, wxALL, 5);
-	server_range_sizer->Add(newd wxStaticText(range_box_sizer->GetStaticBox(), wxID_ANY, "to"), 0, wxALL | wxALIGN_CENTER_VERTICAL, 5);
-	server_range_sizer->Add(server_id_to_spin, 1, wxALL, 5);
-	range_box_sizer->Add(server_range_sizer, 0, wxEXPAND | wxALL, 5);
-
-	// Client ID range
-	wxBoxSizer* client_range_sizer = newd wxBoxSizer(wxHORIZONTAL);
-	client_id_from_spin = newd wxSpinCtrl(range_box_sizer->GetStaticBox(), wxID_ANY, wxEmptyString, wxDefaultPosition, wxDefaultSize, wxSP_ARROW_KEYS, 100, g_gui.gfx.getItemSpriteMaxID(), 100);
-	client_id_to_spin = newd wxSpinCtrl(range_box_sizer->GetStaticBox(), wxID_ANY, wxEmptyString, wxDefaultPosition, wxDefaultSize, wxSP_ARROW_KEYS, 100, g_gui.gfx.getItemSpriteMaxID(), 100);
-	client_range_sizer->Add(client_id_from_spin, 1, wxALL, 5);
-	client_range_sizer->Add(newd wxStaticText(range_box_sizer->GetStaticBox(), wxID_ANY, "to"), 0, wxALL | wxALIGN_CENTER_VERTICAL, 5);
-	client_range_sizer->Add(client_id_to_spin, 1, wxALL, 5);
-	range_box_sizer->Add(client_range_sizer, 0, wxEXPAND | wxALL, 5);
+	// Single range input for both Server and Client IDs
+	wxStaticBoxSizer* range_input_box = newd wxStaticBoxSizer(newd wxStaticBox(range_box_sizer->GetStaticBox(), wxID_ANY, "ID Ranges"), wxVERTICAL);
+	range_input = newd wxTextCtrl(range_input_box->GetStaticBox(), wxID_ANY, "", wxDefaultPosition, wxDefaultSize, 0);
+	range_input->SetToolTip("Enter IDs or ranges separated by commas (e.g., 2222,2244-2266,5219)");
+	range_input->Enable(false);
+	range_input_box->Add(range_input, 0, wxALL | wxEXPAND, 5);
+	range_box_sizer->Add(range_input_box, 0, wxALL | wxEXPAND, 5);
 
 	options_box_sizer->Add(range_box_sizer, 0, wxALL | wxEXPAND, 5);
 
@@ -281,13 +272,6 @@ FindItemDialog::FindItemDialog(wxWindow* parent, const wxString& title, bool onl
 	// Connect the refresh button event
 	refresh_button->Connect(wxEVT_BUTTON, wxCommandEventHandler(FindItemDialog::OnRefreshClick), NULL, this);
 	replace_size_spin->Connect(wxEVT_SPINCTRL, wxCommandEventHandler(FindItemDialog::OnReplaceSizeChange), NULL, this);
-
-	// Make sure all range controls are initially disabled
-	server_id_from_spin->Enable(false);
-	server_id_to_spin->Enable(false);
-	client_id_from_spin->Enable(false);
-	client_id_to_spin->Enable(false);
-	use_range->Enable(false);
 }
 
 FindItemDialog::~FindItemDialog() {
@@ -350,11 +334,15 @@ void FindItemDialog::setSearchMode(FindItemDialog::SearchMode mode) {
 		name_text_input->SetFocus();
 	}
 
-	server_id_from_spin->Enable(mode == SearchMode::ServerIDs);
-	server_id_to_spin->Enable(mode == SearchMode::ServerIDs);
-	client_id_from_spin->Enable(mode == SearchMode::ClientIDs);
-	client_id_to_spin->Enable(mode == SearchMode::ClientIDs);
+	range_input->Enable(mode == SearchMode::ServerIDs || mode == SearchMode::ClientIDs);
 	use_range->Enable(mode == SearchMode::ServerIDs || mode == SearchMode::ClientIDs);
+
+	// Update tooltip based on mode
+	if (mode == SearchMode::ServerIDs) {
+		range_input->SetToolTip("Enter Server IDs or ranges separated by commas (e.g., 2222,2244-2266,5219)");
+	} else if (mode == SearchMode::ClientIDs) {
+		range_input->SetToolTip("Enter Client IDs or ranges separated by commas (e.g., 2222,2244-2266,5219)");
+	}
 }
 
 void FindItemDialog::EnableProperties(bool enable) {
@@ -387,31 +375,19 @@ void FindItemDialog::RefreshContentsInternal() {
 	SearchMode selection = (SearchMode)options_radio_box->GetSelection();
 	if(selection == SearchMode::ServerIDs) {
 		if(use_range->GetValue()) {
-			uint16_t from_id = std::min(server_id_from_spin->GetValue(), server_id_to_spin->GetValue());
-			uint16_t to_id = std::max(server_id_from_spin->GetValue(), server_id_to_spin->GetValue());
+			// Parse the range string into pairs
+			auto ranges = ParseRangeString(range_input->GetValue());
 			
-			for(uint16_t id = from_id; id <= to_id && id <= g_items.getMaxID(); ++id) {
+			for(uint16_t id = 100; id <= g_items.getMaxID(); ++id) {
 				if(items_list->GetItemCount() >= size_t(replace_size_spin->GetValue())) {
 					break;
 				}
 				
-				// Check if ID is ignored
-				bool is_ignored = false;
-				if (ignore_ids_checkbox->GetValue()) {
-					// Check individual ignored IDs
-					if (std::find(ignored_ids.begin(), ignored_ids.end(), id) != ignored_ids.end()) {
-						is_ignored = true;
-					}
-					// Check ignored ranges
-					for (const auto& range : ignored_ranges) {
-						if (id >= range.first && id <= range.second) {
-							is_ignored = true;
-							break;
-						}
-					}
+				// Check if ID is in any of the specified ranges
+				if(!IsInRanges(id, ranges)) {
+					continue;
 				}
-				if (is_ignored) continue;
-
+				
 				ItemType& item = g_items[id];
 				if(item.id == 0) continue;
 				
@@ -463,11 +439,19 @@ void FindItemDialog::RefreshContentsInternal() {
 		}
 	 } else if (selection == SearchMode::ClientIDs) {
         if (use_range->GetValue()) {
-            const uint16_t from_id = std::min(getFromID(), getToID());
-            const uint16_t to_id = std::max(getFromID(), getToID());
+            // Parse the range string into pairs
+            auto ranges = ParseRangeString(range_input->GetValue());
+            
             for (int id = 100; id <= g_items.getMaxID(); ++id) {
+                if(items_list->GetItemCount() >= size_t(replace_size_spin->GetValue())) {
+                    break;
+                }
+
                 ItemType& item = g_items.getItemType(id);
-                if (item.id == 0 || item.clientID < from_id || item.clientID > to_id) {
+                if (item.id == 0) continue;
+
+                // Check if clientID is in any of the specified ranges
+                if (!IsInRanges(item.clientID, ranges)) {
                     continue;
                 }
 
@@ -487,13 +471,9 @@ void FindItemDialog::RefreshContentsInternal() {
                 if (is_ignored) continue;
 
                 RAWBrush* raw_brush = item.raw_brush;
-                if (!raw_brush) {
-                    continue;
-                }
+                if (!raw_brush) continue;
 
-                if (only_pickupables && !item.pickupable) {
-                    continue;
-                }
+                if (only_pickupables && !item.pickupable) continue;
 
                 found_search_results = true;
                 items_list->AddBrush(raw_brush);
@@ -782,3 +762,35 @@ bool isInteger(const std::string& s) {
 }
 
 } // namespace RME
+
+std::vector<std::pair<uint16_t, uint16_t>> FindItemDialog::ParseRangeString(const wxString& input) {
+    std::vector<std::pair<uint16_t, uint16_t>> ranges;
+    std::string str = as_lower_str(nstr(input));
+    std::vector<std::string> parts = splitString(str, ',');
+    
+    for(const auto& part : parts) {
+        if(part.find('-') != std::string::npos) {
+            std::vector<std::string> range = splitString(part, '-');
+            if(range.size() == 2 && isInteger(range[0]) && isInteger(range[1])) {
+                uint16_t from = static_cast<uint16_t>(std::stoi(range[0]));
+                uint16_t to = static_cast<uint16_t>(std::stoi(range[1]));
+                if(from <= to) {
+                    ranges.emplace_back(from, to);
+                }
+            }
+        } else if(isInteger(part)) {
+            uint16_t id = static_cast<uint16_t>(std::stoi(part));
+            ranges.emplace_back(id, id);
+        }
+    }
+    return ranges;
+}
+
+bool FindItemDialog::IsInRanges(uint16_t id, const std::vector<std::pair<uint16_t, uint16_t>>& ranges) {
+    for(const auto& range : ranges) {
+        if(id >= range.first && id <= range.second) {
+            return true;
+        }
+    }
+    return false;
+}

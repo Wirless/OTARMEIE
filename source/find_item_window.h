@@ -66,19 +66,13 @@ public:
 	void setSearchMode(SearchMode mode);
 
 	bool getUseRange() const { return use_range->GetValue(); }
-	uint16_t getFromID() const { 
-		if (getSearchMode() == SearchMode::ServerIDs)
-			return server_id_from_spin->GetValue();
-		return client_id_from_spin->GetValue();
-	}
-	uint16_t getToID() const { 
-		if (getSearchMode() == SearchMode::ServerIDs)
-			return server_id_to_spin->GetValue();
-		return client_id_to_spin->GetValue();
-	}
 
 	wxString GetIgnoreIdsText() const { return ignore_ids_text->GetValue(); }
 	bool IsIgnoreIdsEnabled() const { return ignore_ids_checkbox->GetValue(); }
+
+	wxString GetRangeInput() const { return range_input->GetValue(); }
+
+	std::vector<std::pair<uint16_t, uint16_t>> ParseRangeString(const wxString& input);
 
 private:
 	void EnableProperties(bool enable);
@@ -102,10 +96,6 @@ private:
 
 	wxSpinCtrl* server_id_spin;
 	wxSpinCtrl* client_id_spin;
-	wxSpinCtrl* server_id_from_spin;
-	wxSpinCtrl* server_id_to_spin;
-	wxSpinCtrl* client_id_from_spin;
-	wxSpinCtrl* client_id_to_spin;
 	wxTextCtrl* name_text_input;
 	wxTimer input_timer;
 	wxCheckBox* unpassable;
@@ -143,6 +133,10 @@ private:
 	std::vector<std::pair<uint16_t, uint16_t>> ignored_ranges;
 	
 	void ParseIgnoredIDs();
+
+	wxTextCtrl* range_input;
+
+	bool IsInRanges(uint16_t id, const std::vector<std::pair<uint16_t, uint16_t>>& ranges);
 
 	DECLARE_EVENT_TABLE()
 };
