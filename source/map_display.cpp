@@ -15,30 +15,70 @@
 // along with this program. If not, see <http://www.gnu.org/licenses/>.
 //////////////////////////////////////////////////////////////////////
 
-// ============================================================================
-// TASK: Fix OnSelectionToDoodad to respect item selection state
-// Current issue: Function ignores actual selection state and grabs all items 
-// from tile positions, including unselected items like ground tiles.
-// 
-// Required changes:
-// 1. Use Selection::tiles to get selected tiles
-// 2. For each tile, only include items that have isSelected() == true
-// 3. If no items are selected on a tile but tile itself is selected,
-//    include all items (current behavior)
-// 4. Check Selection class (selection.cpp) for proper selection handling
-//    - Selection::add() marks items as selected
-//    - Selection::remove() marks items as deselected
-//    - Selection::clear() deselects everything
-// 
-// Example problem case:
-// - User selects only top item on a tile
-// - Current code grabs ground + all items
-// - Should only grab the specifically selected item
-// files: map_display.cpp, selection.cpp, gui.cpp 
-// ============================================================================
 
-void MapCanvas::OnSelectionToDoodad(wxCommandEvent& WXUNUSED(event)) {
-    // ... rest of the existing code ...
+/*
+============================================================================
+COLLECTIONS REFACTORING TASK 2.0
+============================================================================
+
+OBJECTIVE:
+Moving from tilesets.xml terrain-based organization to collections.xml category-based 
+organization for better item/brush management.
+
+CURRENT STATUS:
+X Basic CategorySelectionDialog implemented
+✓ Doodads.xml saving working 
+X Collections.xml integration started
+
+REMAINING TASKS:
+
+1. Collections Integration
+   - Ensure collections.xml is properly included in materials.xml
+   - Uncomment <include file="collections.xml"/> in materials.xml
+   - Verify collections.xml is loaded with other material files
+
+2. Brush Management
+   - Move custom brush references from tilesets.xml to collections.xml
+   - Remove custom category from tilesets.xml
+   - Update brush loading to prioritize collections.xml
+
+3. UI Enhancements
+   - Add brush name input field to CategorySelectionDialog
+   - Validate brush names against existing doodads.xml entries
+   - Add preview of brush pattern in dialog
+   - Add category creation option
+
+4. File Structure Updates:
+   collections.xml:
+   <materials>
+     <tileset name="Category">
+       <collections>
+         <brush name="brush_name"/>
+         <item id="item_id"/>
+       </collections>
+     </tileset>
+   </materials>
+
+5. Migration Plan
+   - Create migration tool/function to move existing custom brushes
+   - Update palette loading to handle both systems during transition
+   - Add version check for backward compatibility
+
+6. Testing Requirements
+   - Test brush creation in different categories
+   - Verify palette updates after brush addition
+   - Test brush loading after editor restart
+   - Verify backward compatibility
+
+IMPLEMENTATION NOTES:
+- Use pugixml for all XML operations
+- Maintain error handling and user feedback
+- Keep existing palette refresh mechanism
+- Consider adding undo/redo support for brush management
+
+============================================================================
+*/
+
 
 #include "main.h"
 
@@ -3009,7 +3049,12 @@ void MapCanvas::OnSelectionToDoodad(wxCommandEvent& WXUNUSED(event)) {
     FileName tilesetsPath = g_gui.GetDataDirectory();
     tilesetsPath.SetPath(tilesetsPath.GetPath() + "/" + versionStr);
     tilesetsPath.SetName("tilesets.xml");
+
+	FileName collectionsPath = g_gui.GetDataDirectory();
+	collectionsPath.SetPath(collectionsPath.GetPath() + "/" + versionStr);
+	collectionsPath.SetName("collections.xml");
     
+	wxString collectionsPathStr = collectionsPath.GetFullPath();
     wxString doodadsPathStr = doodadsPath.GetFullPath();
     wxString tilesetsPathStr = tilesetsPath.GetFullPath();
     
@@ -3085,92 +3130,83 @@ void MapCanvas::OnSelectionToDoodad(wxCommandEvent& WXUNUSED(event)) {
         return;
     }
 
-    // Now handle tilesets.xml - just add the brush name reference
-    wxXmlDocument tilesetsDoc;
-    if(!tilesetsDoc.Load(tilesetsPathStr)) {
-        OutputDebugStringA("THE TILESETS TOME IS MISSING! THE RITUAL IS INCOMPLETE!\n");
-        g_gui.PopupDialog(this, "Error", "Could not open tilesets.xml!", wxOK);
-        return;
-    }
-
-    // Find Custom tileset among other tilesets
-    wxXmlNode* tilesetsRoot = tilesetsDoc.GetRoot();
-    wxXmlNode* customTileset = nullptr;
-
-    // Search for Custom tileset among other tilesets
-    for(wxXmlNode* node = tilesetsRoot->GetChildren(); node; node = node->GetNext()) {
-        if(node->GetName() == "tileset" && node->GetAttribute("name") == "Custom") {
-            customTileset = node;
-            break;
-        }
-    }
-
-    if(!customTileset) {
-        OutputDebugStringA("THE CUSTOM TILESET IS MISSING! ADDING IT ALONGSIDE OTHER TILESETS!\n");
-        // Create new Custom tileset at same level as other tilesets
-        customTileset = new wxXmlNode(wxXML_ELEMENT_NODE, "tileset");
-        customTileset->AddAttribute("name", "Custom");
+    // Now add to collections.xml under first available tileset
+    wxXmlDocument collectionsDoc;
+    if(!collectionsDoc.Load(collectionsPathStr)) {
+        OutputDebugStringA("THE COLLECTIONS TOME IS MISSING! CREATING A NEW ONE!\n");
+        wxXmlNode* root = new wxXmlNode(wxXML_ELEMENT_NODE, "materials");
         
-        // Add it after existing tilesets
-        tilesetsRoot->AddChild(customTileset);
+        // Create default tileset
+        wxXmlNode* tileset = new wxXmlNode(wxXML_ELEMENT_NODE, "tileset");
+        tileset->AddAttribute("name", "Default");
+        
+        wxXmlNode* collections = new wxXmlNode(wxXML_ELEMENT_NODE, "collections");
+        tileset->AddChild(collections);
+        root->AddChild(tileset);
+        
+        collectionsDoc.SetRoot(root);
     }
 
-    // Find or create doodad section within Custom tileset
-    wxXmlNode* doodadNode = nullptr;
-    for(wxXmlNode* node = customTileset->GetChildren(); node; node = node->GetNext()) {
-        if(node->GetName() == "doodad") {
-            doodadNode = node;
+    // Find first available tileset
+    wxXmlNode* collectionsRoot = collectionsDoc.GetRoot();
+    wxXmlNode* firstTileset = nullptr;
+    
+    for(wxXmlNode* node = collectionsRoot->GetChildren(); node; node = node->GetNext()) {
+        if(node->GetName() == "tileset") {
+            firstTileset = node;
+            OutputDebugStringA(wxString::Format("FOUND TILESET: %s! THIS SHALL BE OUR VESSEL!\n", 
+                firstTileset->GetAttribute("name")).c_str());
             break;
         }
     }
 
-    if(!doodadNode) {
-        OutputDebugStringA("CANNOT FIND DOODAD SECTION IN CUSTOM TILESET! CREATING IT!\n");
-        doodadNode = new wxXmlNode(wxXML_ELEMENT_NODE, "doodad");
-        customTileset->AddChild(doodadNode);
-    }
+    if(firstTileset) {
+        // Find or create collections node
+        wxXmlNode* collections = firstTileset->GetChildren();
+        if(!collections || collections->GetName() != "collections") {
+            OutputDebugStringA("NO COLLECTIONS NODE FOUND! CREATING ONE FROM THE VOID!\n");
+            collections = new wxXmlNode(wxXML_ELEMENT_NODE, "collections");
+            firstTileset->AddChild(collections);
+        }
 
-    // Add just the brush name reference
-    wxXmlNode* brushRef = new wxXmlNode(wxXML_ELEMENT_NODE, "brush");
-    brushRef->AddAttribute("name", newBrushName);
-    doodadNode->AddChild(brushRef);
+        // Add brush reference
+        wxXmlNode* brushRef = new wxXmlNode(wxXML_ELEMENT_NODE, "brush");
+        brushRef->AddAttribute("name", newBrushName);
+        collections->AddChild(brushRef);
 
-    // Save tilesets.xml
-    if(!tilesetsDoc.Save(tilesetsPathStr)) {
-        OutputDebugStringA("THE TILESETS TOME RESISTS OUR CHANGES!\n");
-        g_gui.PopupDialog(this, "Error", "Could not write to tilesets.xml!", wxOK);
+        // Save collections.xml
+        if(!collectionsDoc.Save(collectionsPathStr)) {
+            OutputDebugStringA("THE COLLECTIONS TOME RESISTS OUR CHANGES!\n");
+            g_gui.PopupDialog(this, "Error", "Could not write to collections.xml!", wxOK);
+            return;
+        }
+        OutputDebugStringA(wxString::Format("THE BRUSH HAS BEEN BOUND TO THE %s TILESET!\n", 
+            firstTileset->GetAttribute("name")).c_str());
+    } else {
+        OutputDebugStringA("NO TILESETS FOUND IN THE COLLECTIONS TOME! THE VOID CONSUMES ALL!\n");
+        g_gui.PopupDialog(this, "Error", "No tilesets found in collections.xml!", wxOK);
         return;
     }
 
-    OutputDebugStringA("THE RITUAL IS COMPLETE! THE DOODAD HAS BEEN BOUND TO BOTH TOMES!\n");
+    OutputDebugStringA("THE RITUAL IS COMPLETE! THE DOODAD HAS BEEN BOUND!\n");
     g_gui.PopupDialog(this, "Success", "IT'S ALIVE! IT'S ALIVE! Created: " + newBrushName, wxOK);
 
-    // First try full version reload for complete refresh
+    // Refresh palettes
+    OutputDebugStringA("INITIATING DARK RITUAL OF PALETTE RECONSTRUCTION!\n");
     wxString error;
     wxArrayString warnings;
-    
-    OutputDebugStringA("INITIATING DARK RITUAL OF PALETTE RECONSTRUCTION!\n");
-    
     if(!g_gui.LoadVersion(g_gui.GetCurrentVersionID(), error, warnings, true)) {
         OutputDebugStringA("THE RITUAL HAS FAILED! FALLING BACK TO PLAN B!\n");
-        
-        // Fallback to manual palette refresh
         PaletteWindow* palette = dynamic_cast<PaletteWindow*>(g_gui.GetPalette());
         if(palette) {
             OutputDebugStringA("COMMANDING THE PALETTE TO RECONSTRUCT ITSELF!\n");
-            palette->InvalidateContents();  // Forces complete reload
+            palette->InvalidateContents();
             palette->SelectPage(TILESET_DOODAD);
             g_gui.RefreshPalettes();
-        } else {
-            OutputDebugStringA("FAILED TO FIND THE PALETTE! THE VOID CONSUMES ALL!\n");
-            g_gui.PopupDialog(this, "Error", "Failed to refresh palette!", wxOK);
-            return;
         }
     } else {
-        // Version reload succeeded, just select the doodad page
         PaletteWindow* palette = dynamic_cast<PaletteWindow*>(g_gui.GetPalette());
         if(palette) {
-            OutputDebugStringA("THE RITUAL NEARS COMPLETION! SUMMONING NEW DOODAD!\n");
             palette->SelectPage(TILESET_DOODAD);
             g_gui.RefreshPalettes();
         }

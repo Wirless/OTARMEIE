@@ -343,4 +343,9 @@
 			<brush name="wooden bars_2"/>
 		</collections>
 	</tileset>
+	
+	<tileset name="Test1">
+		<collections>
+	</collections>
+	</tileset>
 </materials>
