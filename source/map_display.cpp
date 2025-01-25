@@ -20,6 +20,8 @@
 #include <sstream>
 #include <time.h>
 #include <wx/wfstream.h>
+#include <wx/xml/xml.h>
+#include <algorithm>
 
 #include "gui.h"
 #include "editor.h"
@@ -37,6 +39,8 @@
 #include "live_server.h"
 #include "browse_tile_window.h"
 
+#include "minimap_window.h"
+
 #include "doodad_brush.h"
 #include "house_exit_brush.h"
 #include "house_brush.h"
@@ -48,7 +52,8 @@
 #include "raw_brush.h"
 #include "carpet_brush.h"
 #include "table_brush.h"
-#include "minimap_window.h"  // Add this include
+
+#include "selection.h"
 
 BEGIN_EVENT_TABLE(MapCanvas, wxGLCanvas)
 EVT_KEY_DOWN(MapCanvas::OnKeyDown)
@@ -103,6 +108,8 @@ EVT_MENU(MAP_POPUP_MENU_MOVE_TO_TILESET, MapCanvas::OnSelectMoveTo)
 EVT_MENU(MAP_POPUP_MENU_PROPERTIES, MapCanvas::OnProperties)
 // ----
 EVT_MENU(MAP_POPUP_MENU_BROWSE_TILE, MapCanvas::OnBrowseTile)
+// Add to the event table after other MAP_POPUP_MENU items
+EVT_MENU(MAP_POPUP_MENU_SELECTION_TO_DOODAD, MapCanvas::OnSelectionToDoodad)
 
 END_EVENT_TABLE()
 
@@ -2418,6 +2425,9 @@ void MapPopupMenu::Update() {
 	wxMenuItem* fillItem = Append(MAP_POPUP_MENU_FILL, "&Fill Area", "Fill enclosed area with current brush");
 	fillItem->Enable(g_gui.GetCurrentBrush() != nullptr);
 
+	wxMenuItem* selectionToDoodadItem = Append(MAP_POPUP_MENU_SELECTION_TO_DOODAD, "&Selection to Doodad", "Create a doodad brush from the selected items");
+	selectionToDoodadItem->Enable(anything_selected);
+
 	if (anything_selected) {
 		if (editor.selection.size() == 1) {
 			Tile* tile = editor.selection.getSelectedTile();
@@ -2873,4 +2883,134 @@ void MapCanvas::OnFill(wxCommandEvent& WXUNUSED(event)) {
     g_gui.RefreshView();
 
     OutputDebugStringA("Fill operation completed successfully.\n");
+}
+
+void MapCanvas::OnSelectionToDoodad(wxCommandEvent& WXUNUSED(event)) {
+    if (editor.selection.size() == 0) {
+        g_gui.PopupDialog("Error", "No tiles selected.", wxOK);
+        return;
+    }
+
+    // Get selection bounds by iterating through selected tiles
+    Position minPos(0xFFFF, 0xFFFF, 0xFFFF);
+    Position maxPos(0, 0, 0);
+    
+    for(auto tile : editor.selection) {
+        if(!tile) continue;
+        
+        minPos.x = std::min(minPos.x, tile->getX());
+        minPos.y = std::min(minPos.y, tile->getY());
+        minPos.z = std::min(minPos.z, tile->getZ());
+        
+        maxPos.x = std::max(maxPos.x, tile->getX());
+        maxPos.y = std::max(maxPos.y, tile->getY());
+        maxPos.z = std::max(maxPos.z, tile->getZ());
+    }
+
+    // Get current version's doodads.xml path and clean it
+    wxString versionString = g_gui.GetCurrentVersion().getName();
+    std::string versionStr = std::string(versionString.mb_str());
+    // Remove any non-numeric characters
+    versionStr.erase(
+        std::remove_if(versionStr.begin(), versionStr.end(), 
+            [](char c) { return !std::isdigit(c); }
+        ),
+        versionStr.end()
+    );
+    std::string doodadsPath = "data/" + versionStr + "/doodads.xml";
+
+    // Find the highest custom doodad number
+    int highestNum = 0;
+    wxXmlDocument doc;
+    if(doc.Load(wxString(doodadsPath))) {
+        wxXmlNode* root = doc.GetRoot();
+        if(root) {
+            for(wxXmlNode* brushNode = root->GetChildren(); brushNode; brushNode = brushNode->GetNext()) {
+                if(brushNode->GetName() == "brush") {
+                    wxString name = brushNode->GetAttribute("name");
+                    if(name.StartsWith("custom_")) {
+                        long num;
+                        if(name.Mid(7).ToLong(&num)) {
+                            highestNum = std::max(highestNum, (int)num);
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    // Create incremental brush name with "custom_" prefix
+    std::string brushName = "custom_" + std::to_string(highestNum + 1);
+    
+    // Start XML string for the brush
+    std::stringstream xml;
+    xml << "<brush name=\"" << brushName << "\" type=\"doodad\" ";
+    
+    // Get the first item's ID for server_lookid
+    Tile* firstTile = editor.selection.getSelectedTile();
+    if (!firstTile || firstTile->items.empty()) {  // Changed from getItems() to items
+        g_gui.PopupDialog("Error", "No items in selection.", wxOK);
+        return;
+    }
+    
+    xml << "server_lookid=\"" << firstTile->items.front()->getID() << "\" ";  // Changed from getItems() to items
+    xml << "draggable=\"true\" on_blocking=\"true\" thickness=\"100/100\">\n";
+    xml << "\t<composite chance=\"10\">\n";
+
+    // Iterate through selection and add items
+    for (int y = minPos.y; y <= maxPos.y; ++y) {
+        for (int x = minPos.x; x <= maxPos.x; ++x) {
+            Tile* tile = editor.map.getTile(x, y, minPos.z);
+            if (!tile || !tile->isSelected()) continue;
+
+            // Calculate relative position
+            int relX = x - minPos.x;
+            int relY = y - minPos.y;
+
+            // Add all items on this tile in proper stack order
+            const ItemVector& items = tile->items;  // Changed from getItems() to items
+            for (const Item* item : items) {
+                if (!item) continue;
+                xml << "\t\t<tile x=\"" << relX << "\" y=\"" << relY << "\"> ";
+                xml << "<item id=\"" << item->getID() << "\"/> ";
+                xml << "</tile>\n";
+            }
+        }
+    }
+
+    xml << "\t</composite>\n</brush>";
+
+    // Add the new brush to the XML file
+    if(doc.IsOk()) {
+        wxXmlNode* root = doc.GetRoot();
+        // Find the last brush node
+        wxXmlNode* lastBrush = nullptr;
+        for(wxXmlNode* node = root->GetChildren(); node; node = node->GetNext()) {
+            if(node->GetName() == "brush") {
+                lastBrush = node;
+            }
+        }
+        
+        // Create and add the new brush node
+        wxXmlNode* newBrush = new wxXmlNode(wxXML_ELEMENT_NODE, "brush");
+        newBrush->SetContent(wxString(xml.str()));
+        
+        if(lastBrush) {
+            root->InsertChildAfter(newBrush, lastBrush);
+        } else {
+            root->AddChild(newBrush);
+        }
+        
+        // Save the modified XML
+        if(doc.Save(wxString(doodadsPath))) {
+            g_gui.PopupDialog("Success", "Created doodad brush: " + brushName, wxOK);
+        } else {
+            g_gui.PopupDialog("Error", "Failed to save doodads.xml", wxOK);
+        }
+    } else {
+        g_gui.PopupDialog("Error", "Failed to load doodads.xml", wxOK);
+    }
+
+    // Refresh the GUI
+    g_gui.RefreshView();
 }
