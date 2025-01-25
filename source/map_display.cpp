@@ -15,6 +15,31 @@
 // along with this program. If not, see <http://www.gnu.org/licenses/>.
 //////////////////////////////////////////////////////////////////////
 
+// ============================================================================
+// TASK: Fix OnSelectionToDoodad to respect item selection state
+// Current issue: Function ignores actual selection state and grabs all items 
+// from tile positions, including unselected items like ground tiles.
+// 
+// Required changes:
+// 1. Use Selection::tiles to get selected tiles
+// 2. For each tile, only include items that have isSelected() == true
+// 3. If no items are selected on a tile but tile itself is selected,
+//    include all items (current behavior)
+// 4. Check Selection class (selection.cpp) for proper selection handling
+//    - Selection::add() marks items as selected
+//    - Selection::remove() marks items as deselected
+//    - Selection::clear() deselects everything
+// 
+// Example problem case:
+// - User selects only top item on a tile
+// - Current code grabs ground + all items
+// - Should only grab the specifically selected item
+// files: map_display.cpp, selection.cpp, gui.cpp 
+// ============================================================================
+
+void MapCanvas::OnSelectionToDoodad(wxCommandEvent& WXUNUSED(event)) {
+    // ... rest of the existing code ...
+
 #include "main.h"
 
 #include <sstream>
@@ -2913,25 +2938,35 @@ void MapCanvas::OnSelectionToDoodad(wxCommandEvent& WXUNUSED(event)) {
         }
         
         Position tilePos(tile->getX(), tile->getY(), tile->getZ());
-        
-        // Get ALL items from the tile using Map's methods
-        if(tile->ground) {
-            tileItems[tilePos].push_back(tile->ground->getID());
-            totalItems++;
-            OutputDebugStringA(wxString::Format("GROUND ESSENCE %d HARVESTED FROM %d,%d,%d! THE EARTH WEEPS!\n", 
-                tile->ground->getID(), tilePos.x, tilePos.y, tilePos.z).c_str());
+        bool hasSelectedItems = false;
+
+        // First check for specifically selected items
+        for(Item* item : tile->items) {
+            if(item && item->isSelected()) {
+                tileItems[tilePos].push_back(item->getID());
+                totalItems++;
+                hasSelectedItems = true;
+                OutputDebugStringA(wxString::Format("SELECTED ITEM %d HARVESTED FROM %d,%d,%d! THE CHOSEN ONE!\n", 
+                    item->getID(), tilePos.x, tilePos.y, tilePos.z).c_str());
+            }
         }
 
-        // Get all items, including borders
-        const ItemVector& items = tile->items;
-        for(Item* item : items) {
-            if(!item) continue;
-            
-            // We want EVERYTHING! MWAHAHAHA!
-            tileItems[tilePos].push_back(item->getID());
-            totalItems++;
-            OutputDebugStringA(wxString::Format("ITEM %d HAS BEEN ASSIMILATED FROM %d,%d,%d! RESISTANCE IS FUTILE!\n", 
-                item->getID(), tilePos.x, tilePos.y, tilePos.z).c_str());
+        // If no specific items selected but tile is selected, grab all items
+        if(!hasSelectedItems && tile->isSelected()) {
+            if(tile->ground) {
+                tileItems[tilePos].push_back(tile->ground->getID());
+                totalItems++;
+                OutputDebugStringA(wxString::Format("GROUND ESSENCE %d HARVESTED FROM %d,%d,%d! THE EARTH WEEPS!\n", 
+                    tile->ground->getID(), tilePos.x, tilePos.y, tilePos.z).c_str());
+            }
+
+            for(Item* item : tile->items) {
+                if(!item) continue;
+                tileItems[tilePos].push_back(item->getID());
+                totalItems++;
+                OutputDebugStringA(wxString::Format("ITEM %d HAS BEEN ASSIMILATED FROM %d,%d,%d! RESISTANCE IS FUTILE!\n", 
+                    item->getID(), tilePos.x, tilePos.y, tilePos.z).c_str());
+            }
         }
 
         if(!tileItems[tilePos].empty()) {
@@ -2953,11 +2988,6 @@ void MapCanvas::OnSelectionToDoodad(wxCommandEvent& WXUNUSED(event)) {
         maxPos.z = std::max(maxPos.z, tilePos.z);
     }
 
-    OutputDebugStringA(wxString::Format("ANALYSIS COMPLETE!\nTILES PROCESSED: %d\nITEMS ASSIMILATED: %d\nTHE HARVEST IS GOOD!\n", 
-        tileCount, totalItems).c_str());
-
-    // ... rest of XML handling with similar unhinged messages ...
-
     OutputDebugStringA(wxString::Format("MWAHAHAHA! ACQUIRED %d ITEMS FROM %d TILES! THE COLLECTION GROWS!\n", 
         totalItems, tileCount).c_str());
 
@@ -2967,12 +2997,11 @@ void MapCanvas::OnSelectionToDoodad(wxCommandEvent& WXUNUSED(event)) {
         return;
     }
 
-    // PREPARE THE SACRED XML RITUAL!
+    // Get the proper data directory paths
     wxString versionString = g_gui.GetCurrentVersion().getName();
     std::string versionStr = std::string(versionString.mb_str());
     versionStr.erase(std::remove(versionStr.begin(), versionStr.end(), '.'), versionStr.end());
     
-    // Get the proper data directory paths
     FileName doodadsPath = g_gui.GetDataDirectory();
     doodadsPath.SetPath(doodadsPath.GetPath() + "/" + versionStr);
     doodadsPath.SetName("doodads.xml");
@@ -3115,8 +3144,8 @@ void MapCanvas::OnSelectionToDoodad(wxCommandEvent& WXUNUSED(event)) {
 
     OutputDebugStringA("THE RITUAL IS COMPLETE! THE DOODAD HAS BEEN BOUND TO BOTH TOMES!\n");
     g_gui.PopupDialog(this, "Success", "IT'S ALIVE! IT'S ALIVE! Created: " + newBrushName, wxOK);
-// Get the palette window and force refresh
-    // First try the LoadVersion approach to force a complete reload
+
+    // First try full version reload for complete refresh
     wxString error;
     wxArrayString warnings;
     
@@ -3138,14 +3167,12 @@ void MapCanvas::OnSelectionToDoodad(wxCommandEvent& WXUNUSED(event)) {
             return;
         }
     } else {
-        // LoadVersion succeeded, just need to switch to doodad page
+        // Version reload succeeded, just select the doodad page
         PaletteWindow* palette = dynamic_cast<PaletteWindow*>(g_gui.GetPalette());
         if(palette) {
             OutputDebugStringA("THE RITUAL NEARS COMPLETION! SUMMONING NEW DOODAD!\n");
             palette->SelectPage(TILESET_DOODAD);
+            g_gui.RefreshPalettes();
         }
     }
-
-    // Show success message
-    g_gui.PopupDialog(this, "Success", "IT'S ALIVE! IT'S ALIVE! Created: " + newBrushName, wxOK);
 }

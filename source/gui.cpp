@@ -16,7 +16,7 @@
 //////////////////////////////////////////////////////////////////////
 
 /*
- * TASK: Refresh Custom Palette After Selection to Doodad Conversion
+ * TASK: Refresh Custom Palette After Selection to Doodad Conversion POSTPHONED IGNORE UNTIL THIS DOES NOT SAY IGNORE :D
  * --------------------------------------------------------------
  * 
  * Current Behavior:
