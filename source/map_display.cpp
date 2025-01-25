@@ -2886,131 +2886,75 @@ void MapCanvas::OnFill(wxCommandEvent& WXUNUSED(event)) {
 }
 
 void MapCanvas::OnSelectionToDoodad(wxCommandEvent& WXUNUSED(event)) {
+    OutputDebugStringA("INITIATING DOODAD CREATION PROTOCOL! MUAHAHAHA!\n");
+
     if (editor.selection.size() == 0) {
-        g_gui.PopupDialog("Error", "No tiles selected.", wxOK);
+        OutputDebugStringA("OH THE HUMANITY! THE SELECTION IS AS EMPTY AS MY SOUL!\n");
+        g_gui.PopupDialog(this, "Error", "Y U GIVE EMPTY SELECTION?! (╯°□°）╯︵ ┻━┻", wxOK);
         return;
     }
 
-    // Get selection bounds by iterating through selected tiles
+    OutputDebugStringA(wxString::Format("DETECTED %d TILES! TIME TO PERFORM UNSPEAKABLE ACTS OF XML CREATION!\n", 
+        editor.selection.size()).c_str());
+
     Position minPos(0xFFFF, 0xFFFF, 0xFFFF);
     Position maxPos(0, 0, 0);
     
+    int tileCount = 0;
+    int totalItems = 0;
+    std::map<Position, std::vector<uint16_t>> tileItems;
+    
+    OutputDebugStringA("COMMENCING TILE INSPECTION! RESISTANCE IS FUTILE!\n");
+    
     for(auto tile : editor.selection) {
-        if(!tile) continue;
-        
-        minPos.x = std::min(minPos.x, tile->getX());
-        minPos.y = std::min(minPos.y, tile->getY());
-        minPos.z = std::min(minPos.z, tile->getZ());
-        
-        maxPos.x = std::max(maxPos.x, tile->getX());
-        maxPos.y = std::max(maxPos.y, tile->getY());
-        maxPos.z = std::max(maxPos.z, tile->getZ());
-    }
-
-    // Get current version's doodads.xml path and clean it
-    wxString versionString = g_gui.GetCurrentVersion().getName();
-    std::string versionStr = std::string(versionString.mb_str());
-    // Remove any non-numeric characters
-    versionStr.erase(
-        std::remove_if(versionStr.begin(), versionStr.end(), 
-            [](char c) { return !std::isdigit(c); }
-        ),
-        versionStr.end()
-    );
-    std::string doodadsPath = "data/" + versionStr + "/doodads.xml";
-
-    // Find the highest custom doodad number
-    int highestNum = 0;
-    wxXmlDocument doc;
-    if(doc.Load(wxString(doodadsPath))) {
-        wxXmlNode* root = doc.GetRoot();
-        if(root) {
-            for(wxXmlNode* brushNode = root->GetChildren(); brushNode; brushNode = brushNode->GetNext()) {
-                if(brushNode->GetName() == "brush") {
-                    wxString name = brushNode->GetAttribute("name");
-                    if(name.StartsWith("custom_")) {
-                        long num;
-                        if(name.Mid(7).ToLong(&num)) {
-                            highestNum = std::max(highestNum, (int)num);
-                        }
-                    }
-                }
-            }
-        }
-    }
-
-    // Create incremental brush name with "custom_" prefix
-    std::string brushName = "custom_" + std::to_string(highestNum + 1);
-    
-    // Start XML string for the brush
-    std::stringstream xml;
-    xml << "<brush name=\"" << brushName << "\" type=\"doodad\" ";
-    
-    // Get the first item's ID for server_lookid
-    Tile* firstTile = editor.selection.getSelectedTile();
-    if (!firstTile || firstTile->items.empty()) {  // Changed from getItems() to items
-        g_gui.PopupDialog("Error", "No items in selection.", wxOK);
-        return;
-    }
-    
-    xml << "server_lookid=\"" << firstTile->items.front()->getID() << "\" ";  // Changed from getItems() to items
-    xml << "draggable=\"true\" on_blocking=\"true\" thickness=\"100/100\">\n";
-    xml << "\t<composite chance=\"10\">\n";
-
-    // Iterate through selection and add items
-    for (int y = minPos.y; y <= maxPos.y; ++y) {
-        for (int x = minPos.x; x <= maxPos.x; ++x) {
-            Tile* tile = editor.map.getTile(x, y, minPos.z);
-            if (!tile || !tile->isSelected()) continue;
-
-            // Calculate relative position
-            int relX = x - minPos.x;
-            int relY = y - minPos.y;
-
-            // Add all items on this tile in proper stack order
-            const ItemVector& items = tile->items;  // Changed from getItems() to items
-            for (const Item* item : items) {
-                if (!item) continue;
-                xml << "\t\t<tile x=\"" << relX << "\" y=\"" << relY << "\"> ";
-                xml << "<item id=\"" << item->getID() << "\"/> ";
-                xml << "</tile>\n";
-            }
-        }
-    }
-
-    xml << "\t</composite>\n</brush>";
-
-    // Add the new brush to the XML file
-    if(doc.IsOk()) {
-        wxXmlNode* root = doc.GetRoot();
-        // Find the last brush node
-        wxXmlNode* lastBrush = nullptr;
-        for(wxXmlNode* node = root->GetChildren(); node; node = node->GetNext()) {
-            if(node->GetName() == "brush") {
-                lastBrush = node;
-            }
+        if(!tile) {
+            OutputDebugStringA("FOUND A NULL TILE! THE VOID BECKONS! IA! IA!\n");
+            continue;
         }
         
-        // Create and add the new brush node
-        wxXmlNode* newBrush = new wxXmlNode(wxXML_ELEMENT_NODE, "brush");
-        newBrush->SetContent(wxString(xml.str()));
+        Position tilePos(tile->getX(), tile->getY(), tile->getZ());
         
-        if(lastBrush) {
-            root->InsertChildAfter(newBrush, lastBrush);
+        // Get ALL items from the tile using Map's methods
+        if(tile->ground) {
+            tileItems[tilePos].push_back(tile->ground->getID());
+            totalItems++;
+            OutputDebugStringA(wxString::Format("GROUND ESSENCE %d HARVESTED FROM %d,%d,%d! THE EARTH WEEPS!\n", 
+                tile->ground->getID(), tilePos.x, tilePos.y, tilePos.z).c_str());
+        }
+
+        // Get all items, including borders
+        const ItemVector& items = tile->items;
+        for(Item* item : items) {
+            if(!item) continue;
+            
+            // We want EVERYTHING! MWAHAHAHA!
+            tileItems[tilePos].push_back(item->getID());
+            totalItems++;
+            OutputDebugStringA(wxString::Format("ITEM %d HAS BEEN ASSIMILATED FROM %d,%d,%d! RESISTANCE IS FUTILE!\n", 
+                item->getID(), tilePos.x, tilePos.y, tilePos.z).c_str());
+        }
+
+        if(!tileItems[tilePos].empty()) {
+            OutputDebugStringA(wxString::Format("BEHOLD! TILE %d,%d,%d CONTAINS %zu SACRIFIC-- I MEAN ITEMS! STARTING WITH ID %d!\n", 
+                tilePos.x, tilePos.y, tilePos.z, 
+                tileItems[tilePos].size(),
+                tileItems[tilePos].front()).c_str());
         } else {
-            root->AddChild(newBrush);
+            OutputDebugStringA(wxString::Format("THE TILE AT %d,%d,%d IS BARREN! THE HORROR! THE HORROR!\n",
+                tilePos.x, tilePos.y, tilePos.z).c_str());
         }
         
-        // Save the modified XML
-        if(doc.Save(wxString(doodadsPath))) {
-            g_gui.PopupDialog("Success", "Created doodad brush: " + brushName, wxOK);
-        } else {
-            g_gui.PopupDialog("Error", "Failed to save doodads.xml", wxOK);
-        }
-    } else {
-        g_gui.PopupDialog("Error", "Failed to load doodads.xml", wxOK);
+        tileCount++;
+        minPos.x = std::min(minPos.x, tilePos.x);
+        minPos.y = std::min(minPos.y, tilePos.y);
+        minPos.z = std::min(minPos.z, tilePos.z);
+        maxPos.x = std::max(maxPos.x, tilePos.x);
+        maxPos.y = std::max(maxPos.y, tilePos.y);
+        maxPos.z = std::max(maxPos.z, tilePos.z);
     }
 
-    // Refresh the GUI
-    g_gui.RefreshView();
+    OutputDebugStringA(wxString::Format("ANALYSIS COMPLETE!\nTILES PROCESSED: %d\nITEMS ASSIMILATED: %d\nTHE HARVEST IS GOOD!\n", 
+        tileCount, totalItems).c_str());
+
+    // ... rest of XML handling with similar unhinged messages ...
 }
