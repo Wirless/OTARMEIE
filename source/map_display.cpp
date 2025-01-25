@@ -3116,13 +3116,36 @@ void MapCanvas::OnSelectionToDoodad(wxCommandEvent& WXUNUSED(event)) {
     OutputDebugStringA("THE RITUAL IS COMPLETE! THE DOODAD HAS BEEN BOUND TO BOTH TOMES!\n");
     g_gui.PopupDialog(this, "Success", "IT'S ALIVE! IT'S ALIVE! Created: " + newBrushName, wxOK);
 // Get the palette window and force refresh
-    PaletteWindow* palette = dynamic_cast<PaletteWindow*>(g_gui.GetPalette());
-    if(palette) {
-        OutputDebugStringA("COMMANDING THE PALETTE TO RECONSTRUCT ITSELF!\n");
-        palette->InvalidateContents();  // This forces a complete reload of palette contents
-        palette->SelectPage(TILESET_DOODAD);  // Switch to doodad page
+    // First try the LoadVersion approach to force a complete reload
+    wxString error;
+    wxArrayString warnings;
+    
+    OutputDebugStringA("INITIATING DARK RITUAL OF PALETTE RECONSTRUCTION!\n");
+    
+    if(!g_gui.LoadVersion(g_gui.GetCurrentVersionID(), error, warnings, true)) {
+        OutputDebugStringA("THE RITUAL HAS FAILED! FALLING BACK TO PLAN B!\n");
+        
+        // Fallback to manual palette refresh
+        PaletteWindow* palette = dynamic_cast<PaletteWindow*>(g_gui.GetPalette());
+        if(palette) {
+            OutputDebugStringA("COMMANDING THE PALETTE TO RECONSTRUCT ITSELF!\n");
+            palette->InvalidateContents();  // Forces complete reload
+            palette->SelectPage(TILESET_DOODAD);
+            g_gui.RefreshPalettes();
+        } else {
+            OutputDebugStringA("FAILED TO FIND THE PALETTE! THE VOID CONSUMES ALL!\n");
+            g_gui.PopupDialog(this, "Error", "Failed to refresh palette!", wxOK);
+            return;
+        }
     } else {
-        OutputDebugStringA("FAILED TO FIND THE PALETTE! THE VOID CONSUMES ALL!\n");
+        // LoadVersion succeeded, just need to switch to doodad page
+        PaletteWindow* palette = dynamic_cast<PaletteWindow*>(g_gui.GetPalette());
+        if(palette) {
+            OutputDebugStringA("THE RITUAL NEARS COMPLETION! SUMMONING NEW DOODAD!\n");
+            palette->SelectPage(TILESET_DOODAD);
+        }
     }
-    g_gui.RefreshPalettes();  // This is already correctly refreshing the palettes
+
+    // Show success message
+    g_gui.PopupDialog(this, "Success", "IT'S ALIVE! IT'S ALIVE! Created: " + newBrushName, wxOK);
 }
