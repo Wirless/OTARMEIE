@@ -3030,17 +3030,19 @@ void MapCanvas::OnSelectionToDoodad(wxCommandEvent& WXUNUSED(event)) {
         int relX = pos.x - minPos.x;
         int relY = pos.y - minPos.y;
         
+        // Create tile node once per position
+        wxXmlNode* tileNode = new wxXmlNode(wxXML_ELEMENT_NODE, "tile");
+        tileNode->AddAttribute("x", wxString::Format("%d", relX));
+        tileNode->AddAttribute("y", wxString::Format("%d", relY));
+        
+        // Add all items for this tile position in the correct order
         for(uint16_t itemId : tilePair.second) {
-            wxXmlNode* tileNode = new wxXmlNode(wxXML_ELEMENT_NODE, "tile");
-            tileNode->AddAttribute("x", wxString::Format("%d", relX));
-            tileNode->AddAttribute("y", wxString::Format("%d", relY));
-            
             wxXmlNode* itemNode = new wxXmlNode(wxXML_ELEMENT_NODE, "item");
             itemNode->AddAttribute("id", wxString::Format("%d", itemId));
             tileNode->AddChild(itemNode);
-            
-            compositeNode->AddChild(tileNode);
         }
+        
+        compositeNode->AddChild(tileNode);
     }
 
     alternateNode->AddChild(compositeNode);
