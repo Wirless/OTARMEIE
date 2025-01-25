@@ -3114,7 +3114,7 @@ void MapCanvas::OnSelectionToDoodad(wxCommandEvent& WXUNUSED(event)) {
     OutputDebugStringA("THE RITUAL IS COMPLETE! THE DOODAD HAS BEEN BOUND TO BOTH TOMES!\n");
     g_gui.PopupDialog(this, "Success", "IT'S ALIVE! IT'S ALIVE! Created: " + newBrushName, wxOK);
 // Get the palette window and force refresh
-    PaletteWindow* palette = dynamic_cast<PaletteWindow*>(g_gui.GetPalette());
+    PaletteWindow* palette = dynamic_cast<PaletteWindow*>(g_gui.GetBrushPalettePanel());
     if(palette) {
         OutputDebugStringA("COMMANDING THE PALETTE TO RECONSTRUCT ITSELF!\n");
         palette->InvalidateContents();  // This forces a complete reload of palette contents
