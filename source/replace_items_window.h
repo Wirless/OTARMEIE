@@ -21,6 +21,7 @@
 #include "main.h"
 #include "common_windows.h"
 #include "editor.h"
+#include <wx/tokenzr.h>
 
 struct ReplacingItem {
 	ReplacingItem() :
@@ -153,14 +154,19 @@ private:
 	wxButton* swap_button;
 	wxCheckBox* swap_checkbox;
 
+	// Add new range input control
+	wxTextCtrl* replace_range_input;
+
 	void OnPresetSelect(wxCommandEvent& event);
 	void OnAddPreset(wxCommandEvent& event);
 	void OnRemovePreset(wxCommandEvent& event);
 
-
 	void SavePresetToXML(const wxString& name);
 	void LoadPresetFromXML(const wxString& name);
 	void RefreshPresetList();
+
+	// Helper function to parse and add items from range
+	void AddItemsFromRange(const wxString& rangeStr, uint16_t withId);
 
 	static const int ID_SAVE_PRESET = 1001;
 	static const int ID_LOAD_PRESET = 1002;

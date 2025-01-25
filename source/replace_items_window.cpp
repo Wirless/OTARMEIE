@@ -27,32 +27,41 @@
 #include "wall_brush.h"
 #include "doodad_brush.h"
 #include <wx/dir.h>
+#include <wx/tokenzr.h>
 
 /*
  * ! CURRENT TASK:
- * Swap Functionality in Replace Items Dialog 
- * ----------------------------------------
- * The swap checkbox allows users to reverse the direction of item replacement.
+ * Interactive Item ID Editing in Replace Items Dialog 
+ * ------------------------------------------------
+ * Transform the static ID display in the replacement list into interactive input fields
  * 
- * Normal Operation (Unchecked):
- * - replaceId -> withId
- * - Example: If replacing item 100 with 200, it finds all items with ID 100 and changes them to 200
+ * Current Operation:
+ * - Items are added to list with single replaceId and withId values
+ * - IDs are displayed as static text in format "Replace: X With: Y"
  * 
- * Reversed Operation (Checked):
- * - withId -> replaceId 
- * - Example: If replacing item 100 with 200, it finds all items with ID 200 and changes them to 100
+ * Desired Changes:
+ * - Create additional input field for replaceId range input and withId static input window left as is
+ * - Allow range input in the format "2000-2010,2020" directly in the replaceId additional input field that if populated overloads the main replaceId input window so both for replaceId are present and for withId only the click input window
+ * - Support both single IDs(click input window takes care of that) and ranges for the replaceId input
+ * - after pressing Add query each item from range to be added 1 by 1 to the list for replaceId.range = withId input
+ * 
+ * Example Usage:
+ * 1. User presses replaceId from palette and withId from palette normal use case
+ * 2. User writes in the range for replaceId field and puts withId from palette and pressed Add button adds range of replaceId items to the list for replaceId.range = withId input
+ * 3. System automatically handles the range mapping for replacement
+ * 
+ * Technical Requirements:
+ * - Replace static text rendering with wxTextCtrl components
+ * - Parse range inputs using existing range parsing logic
+ * - Update item data immediately when input changes
+ * - Maintain undo/redo compatibility
+ * - Preserve item metadata and completion status
  * 
  * Visual Feedback:
- * - Arrow bitmap rotates 180 degrees when checked to indicate reversed direction
- * - Helps users understand the current replacement direction
- * 
- * Implementation Notes:
- * - Actual swap happens during execution, not in the UI
- * - Preserves all item metadata and completion status
- * - Integrated with the undo/redo system through action queue
- * - Works with both single items and batch replacements
+ * - Input fields clearly show current values
+ * - Invalid inputs are visually indicated
+ * - Maintain arrow direction indicator for swap functionality
  */
-
 // ============================================================================
 // ReplaceItemsButton
 
@@ -222,6 +231,16 @@ ReplaceItemsDialog::ReplaceItemsDialog(wxWindow* parent, bool selectionOnly) :
 	replace_button = new ReplaceItemsButton(this);
 	items_sizer->Add(replace_button, 0, wxALL, 5);
 
+	// After replace_button initialization, add range input
+	wxBoxSizer* range_sizer = new wxBoxSizer(wxHORIZONTAL);
+	replace_range_input = new wxTextCtrl(this, wxID_ANY, "", 
+		wxDefaultPosition, wxDefaultSize);
+	replace_range_input->SetToolTip("Enter range (e.g., 100-105,200)");
+	range_sizer->Add(new wxStaticText(this, wxID_ANY, "Replace Range:"), 
+		0, wxALIGN_CENTER_VERTICAL | wxRIGHT, 5);
+	range_sizer->Add(replace_range_input, 1, wxEXPAND);
+	items_sizer->Add(range_sizer, 1, wxALL | wxEXPAND, 5);
+
 	wxBitmap bitmap = wxArtProvider::GetBitmap(ART_POSITION_GO, wxART_TOOLBAR, wxSize(16, 16));
 	arrow_bitmap = new wxStaticBitmap(this, wxID_ANY, bitmap);
 	items_sizer->Add(arrow_bitmap, 0, wxTOP, 15);
@@ -383,16 +402,67 @@ void ReplaceItemsDialog::OnWithItemClicked(wxMouseEvent& WXUNUSED(event)) {
 }
 
 void ReplaceItemsDialog::OnAddButtonClicked(wxCommandEvent& WXUNUSED(event)) {
-	const uint16_t replaceId = replace_button->GetItemId();
 	const uint16_t withId = with_button->GetItemId();
-	if (list->CanAdd(replaceId, withId)) {
-		ReplacingItem item;
-		item.replaceId = replaceId;
-		item.withId = withId;
-		if (list->AddItem(item)) {
-			replace_button->SetItemId(0);
-			with_button->SetItemId(0);
-			UpdateWidgets();
+	if (withId == 0) return;
+
+	// Check if range input is provided
+	wxString rangeStr = replace_range_input->GetValue().Trim();
+	if (!rangeStr.IsEmpty()) {
+		AddItemsFromRange(rangeStr, withId);
+	} else {
+		// Original single item add logic
+		const uint16_t replaceId = replace_button->GetItemId();
+		if (list->CanAdd(replaceId, withId)) {
+			ReplacingItem item;
+			item.replaceId = replaceId;
+			item.withId = withId;
+			list->AddItem(item);
+		}
+	}
+
+	// Reset controls
+	replace_button->SetItemId(0);
+	with_button->SetItemId(0);
+	replace_range_input->SetValue("");
+	UpdateWidgets();
+}
+
+void ReplaceItemsDialog::AddItemsFromRange(const wxString& rangeStr, uint16_t withId) {
+	wxString input = rangeStr;
+	wxStringTokenizer tokenizer(input, ",");
+	
+	while (tokenizer.HasMoreTokens()) {
+		wxString token = tokenizer.GetNextToken().Trim();
+		
+		if (token.Contains("-")) {
+			// Handle range (e.g., "100-105")
+			long start, end;
+			wxString startStr = token.Before('-').Trim();
+			wxString endStr = token.After('-').Trim();
+			
+			if (startStr.ToLong(&start) && endStr.ToLong(&end)) {
+				for (long i = start; i <= end; ++i) {
+					if (i > 0 && i <= 65535) {  // Valid uint16_t range
+						ReplacingItem item;
+						item.replaceId = static_cast<uint16_t>(i);
+						item.withId = withId;
+						if (list->CanAdd(item.replaceId, item.withId)) {
+							list->AddItem(item);
+						}
+					}
+				}
+			}
+		} else {
+			// Handle single number
+			long id;
+			if (token.ToLong(&id) && id > 0 && id <= 65535) {
+				ReplacingItem item;
+				item.replaceId = static_cast<uint16_t>(id);
+				item.withId = withId;
+				if (list->CanAdd(item.replaceId, item.withId)) {
+					list->AddItem(item);
+				}
+			}
 		}
 	}
 }
