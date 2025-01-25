@@ -355,9 +355,10 @@ ReplaceItemsDialog::~ReplaceItemsDialog() {
 }
 
 void ReplaceItemsDialog::UpdateWidgets() {
-	const uint16_t replaceId = replace_button->GetItemId();
-	const uint16_t withId = with_button->GetItemId();
-	add_button->Enable(list->CanAdd(replaceId, withId));
+	// Always enable add button, we'll handle validation with error messages
+	add_button->Enable(true);
+	
+	// Only these buttons need conditional enabling
 	remove_button->Enable(list->GetCount() != 0 && list->GetSelection() != wxNOT_FOUND);
 	execute_button->Enable(list->GetCount() != 0);
 }
@@ -403,7 +404,10 @@ void ReplaceItemsDialog::OnWithItemClicked(wxMouseEvent& WXUNUSED(event)) {
 
 void ReplaceItemsDialog::OnAddButtonClicked(wxCommandEvent& WXUNUSED(event)) {
 	const uint16_t withId = with_button->GetItemId();
-	if (withId == 0) return;
+	if (withId == 0) {
+		wxMessageBox("Please select an item to replace with!", "Error", wxOK | wxICON_ERROR);
+		return;
+	}
 
 	// Check if range input is provided
 	wxString rangeStr = replace_range_input->GetValue().Trim();
@@ -412,12 +416,21 @@ void ReplaceItemsDialog::OnAddButtonClicked(wxCommandEvent& WXUNUSED(event)) {
 	} else {
 		// Original single item add logic
 		const uint16_t replaceId = replace_button->GetItemId();
-		if (list->CanAdd(replaceId, withId)) {
-			ReplacingItem item;
-			item.replaceId = replaceId;
-			item.withId = withId;
-			list->AddItem(item);
+		if (replaceId == 0) {
+			wxMessageBox("Please select an item to replace!", "Error", wxOK | wxICON_ERROR);
+			return;
 		}
+		
+		// Only check CanAdd for single items, not for range inputs
+		if (!list->CanAdd(replaceId, withId)) {
+			wxMessageBox("This item is already in the list or cannot be replaced with itself!", "Error", wxOK | wxICON_ERROR);
+			return;
+		}
+		
+		ReplacingItem item;
+		item.replaceId = replaceId;
+		item.withId = withId;
+		list->AddItem(item);
 	}
 
 	// Reset controls
@@ -430,6 +443,7 @@ void ReplaceItemsDialog::OnAddButtonClicked(wxCommandEvent& WXUNUSED(event)) {
 void ReplaceItemsDialog::AddItemsFromRange(const wxString& rangeStr, uint16_t withId) {
 	wxString input = rangeStr;
 	wxStringTokenizer tokenizer(input, ",");
+	bool addedAny = false;
 	
 	while (tokenizer.HasMoreTokens()) {
 		wxString token = tokenizer.GetNextToken().Trim();
@@ -446,9 +460,9 @@ void ReplaceItemsDialog::AddItemsFromRange(const wxString& rangeStr, uint16_t wi
 						ReplacingItem item;
 						item.replaceId = static_cast<uint16_t>(i);
 						item.withId = withId;
-						if (list->CanAdd(item.replaceId, item.withId)) {
-							list->AddItem(item);
-						}
+						// Skip CanAdd check for range inputs
+						list->AddItem(item);
+						addedAny = true;
 					}
 				}
 			}
@@ -459,11 +473,15 @@ void ReplaceItemsDialog::AddItemsFromRange(const wxString& rangeStr, uint16_t wi
 				ReplacingItem item;
 				item.replaceId = static_cast<uint16_t>(id);
 				item.withId = withId;
-				if (list->CanAdd(item.replaceId, item.withId)) {
-					list->AddItem(item);
-				}
+				// Skip CanAdd check for range inputs
+				list->AddItem(item);
+				addedAny = true;
 			}
 		}
+	}
+
+	if (!addedAny) {
+		wxMessageBox("No valid values in range!", "Error", wxOK | wxICON_ERROR);
 	}
 }
 

@@ -128,7 +128,7 @@ public:
 	void OnManagePresets(wxCommandEvent& event);
 	void OnSwapButtonClicked(wxCommandEvent& event);
 	void OnSwapCheckboxClicked(wxCommandEvent& event);
-
+	void AddItemsFromRange(const wxString& rangeStr, uint16_t withId);
 	uint16_t getActualItemIdFromBrush(const Brush* brush) const;
 
 private:
@@ -165,8 +165,6 @@ private:
 	void LoadPresetFromXML(const wxString& name);
 	void RefreshPresetList();
 
-	// Helper function to parse and add items from range
-	void AddItemsFromRange(const wxString& rangeStr, uint16_t withId);
 
 	static const int ID_SAVE_PRESET = 1001;
 	static const int ID_LOAD_PRESET = 1002;
