@@ -95,7 +95,6 @@ FindItemDialog::FindItemDialog(wxWindow* parent, const wxString& title, bool onl
 	wxStaticBoxSizer* range_input_box = newd wxStaticBoxSizer(newd wxStaticBox(range_box_sizer->GetStaticBox(), wxID_ANY, "ID Ranges"), wxVERTICAL);
 	range_input = newd wxTextCtrl(range_input_box->GetStaticBox(), wxID_ANY, "", wxDefaultPosition, wxDefaultSize, 0);
 	range_input->SetToolTip("Enter IDs or ranges separated by commas (e.g., 2222,2244-2266,5219)");
-	range_input->Enable(false);
 	range_input_box->Add(range_input, 0, wxALL | wxEXPAND, 5);
 	range_box_sizer->Add(range_input_box, 0, wxALL | wxEXPAND, 5);
 
@@ -794,3 +793,4 @@ bool FindItemDialog::IsInRanges(uint16_t id, const std::vector<std::pair<uint16_
     }
     return false;
 }
+

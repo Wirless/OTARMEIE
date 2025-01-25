@@ -125,6 +125,7 @@ public:
 	void OnSavePreset(wxCommandEvent& event);
 	void OnLoadPreset(wxCommandEvent& event);
 	void OnManagePresets(wxCommandEvent& event);
+	void OnSwapButtonClicked(wxCommandEvent& event);
 
 	uint16_t getActualItemIdFromBrush(const Brush* brush) const;
 
@@ -148,6 +149,7 @@ private:
 	wxButton* add_preset_button;
 	wxButton* remove_preset_button;
 	wxButton* load_preset_button;
+	wxButton* swap_button;
 
 	void OnPresetSelect(wxCommandEvent& event);
 	void OnAddPreset(wxCommandEvent& event);

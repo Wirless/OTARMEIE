@@ -1179,25 +1179,58 @@ void MainMenuBar::OnReplaceItemsOnSelection(wxCommandEvent& WXUNUSED(event)) {
 }
 
 void MainMenuBar::OnRemoveItemOnSelection(wxCommandEvent& WXUNUSED(event)) {
-	if (!g_gui.IsEditorOpen()) {
-		return;
-	}
+    if (!g_gui.IsEditorOpen()) {
+        return;
+    }
 
-	FindItemDialog dialog(frame, "Remove Item on Selection");
-	if (dialog.ShowModal() == wxID_OK) {
-		g_gui.GetCurrentEditor()->actionQueue->clear();
-		g_gui.CreateLoadBar("Searching item on selection to remove...");
-		OnMapRemoveItems::RemoveItemCondition condition(dialog.getResultID());
-		int64_t count = RemoveItemOnMap(g_gui.GetCurrentMap(), condition, true);
-		g_gui.DestroyLoadBar();
+    FindItemDialog dialog(frame, "Remove Items on Selection");
+    dialog.setSearchMode((FindItemDialog::SearchMode)g_settings.getInteger(Config::FIND_ITEM_MODE));
+    
+    if (dialog.ShowModal() == wxID_OK) {
+        g_gui.GetCurrentEditor()->actionQueue->clear();
+        g_gui.CreateLoadBar("Searching items on selection to remove...");
+        
+        int64_t count = 0;
+        
+        if (dialog.getUseRange()) {
+            auto ranges = dialog.ParseRangeString(dialog.GetRangeInput());
+            if (!ranges.empty()) {
+                // Create a condition that checks if an item's ID is within any of the ranges
+                struct RangeRemoveCondition {
+                    std::vector<std::pair<uint16_t, uint16_t>> ranges;
+                    
+                    RangeRemoveCondition(const std::vector<std::pair<uint16_t, uint16_t>>& r) : ranges(r) {}
+                    
+                    bool operator()(Map& map, Item* item, long long removed, long long done) {
+                        if (done % 0x800 == 0) {
+                            g_gui.SetLoadDone((unsigned int)(100 * done / map.getTileCount()));
+                        }
+                        
+                        for (const auto& range : ranges) {
+                            if (item->getID() >= range.first && item->getID() <= range.second) {
+                                return true;
+                            }
+                        }
+                        return false;
+                    }
+                } condition(ranges);
+                
+                count = RemoveItemOnMap(g_gui.GetCurrentMap(), condition, true);
+            }
+        } else {
+            OnMapRemoveItems::RemoveItemCondition condition(dialog.getResultID());
+            count = RemoveItemOnMap(g_gui.GetCurrentMap(), condition, true);
+        }
+        
+        g_gui.DestroyLoadBar();
 
-		wxString msg;
-		msg << count << " items removed.";
-		g_gui.PopupDialog("Remove Item", msg, wxOK);
-		g_gui.GetCurrentMap().doChange();
-		g_gui.RefreshView();
-	}
-	dialog.Destroy();
+        wxString msg;
+        msg << count << " items removed.";
+        g_gui.PopupDialog("Remove Items", msg, wxOK);
+        g_gui.GetCurrentMap().doChange();
+        g_gui.RefreshView();
+    }
+    dialog.Destroy();
 }
 
 void MainMenuBar::OnSelectionTypeChange(wxCommandEvent& WXUNUSED(event)) {

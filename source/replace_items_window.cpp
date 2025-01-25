@@ -225,7 +225,11 @@ ReplaceItemsDialog::ReplaceItemsDialog(wxWindow* parent, bool selectionOnly) :
 	buttons_sizer->Add(remove_button, 0, wxALL, 5);
 	remove_button->SetMinSize(wxSize(60, 30));
 
-	buttons_sizer->Add(0, 0, 1, wxEXPAND, 5);
+    buttons_sizer->Add(0, 0, 1, wxEXPAND, 5);
+	swap_button = new wxButton(this, wxID_ANY, wxT("Swap"));
+	swap_button->Enable(false);
+	buttons_sizer->Add(swap_button, 0, wxALL, 5);
+	swap_button->SetMinSize(wxSize(60, 30));
 
 	execute_button = new wxButton(this, wxID_ANY, wxT("Execute"));
 	execute_button->Enable(false);
@@ -277,6 +281,7 @@ ReplaceItemsDialog::ReplaceItemsDialog(wxWindow* parent, bool selectionOnly) :
 	add_preset_button->Connect(wxEVT_BUTTON, wxCommandEventHandler(ReplaceItemsDialog::OnAddPreset), NULL, this);
 	remove_preset_button->Connect(wxEVT_BUTTON, wxCommandEventHandler(ReplaceItemsDialog::OnRemovePreset), NULL, this);
 	load_preset_button->Connect(wxEVT_BUTTON, wxCommandEventHandler(ReplaceItemsDialog::OnLoadPreset), NULL, this);
+	swap_button->Connect(wxEVT_COMMAND_BUTTON_CLICKED, wxCommandEventHandler(ReplaceItemsDialog::OnSwapButtonClicked), NULL, this);
 
 	// Load initial preset list
 	RefreshPresetList();
@@ -294,6 +299,8 @@ ReplaceItemsDialog::~ReplaceItemsDialog() {
 	preset_choice->Disconnect(wxEVT_CHOICE, wxCommandEventHandler(ReplaceItemsDialog::OnPresetSelect), NULL, this);
 	add_preset_button->Disconnect(wxEVT_BUTTON, wxCommandEventHandler(ReplaceItemsDialog::OnAddPreset), NULL, this);
 	remove_preset_button->Disconnect(wxEVT_BUTTON, wxCommandEventHandler(ReplaceItemsDialog::OnRemovePreset), NULL, this);
+	load_preset_button->Disconnect(wxEVT_BUTTON, wxCommandEventHandler(ReplaceItemsDialog::OnLoadPreset), NULL, this);
+	swap_button->Disconnect(wxEVT_COMMAND_BUTTON_CLICKED, wxCommandEventHandler(ReplaceItemsDialog::OnSwapButtonClicked), NULL, this);
 }
 
 void ReplaceItemsDialog::UpdateWidgets() {
@@ -302,6 +309,7 @@ void ReplaceItemsDialog::UpdateWidgets() {
 	add_button->Enable(list->CanAdd(replaceId, withId));
 	remove_button->Enable(list->GetCount() != 0 && list->GetSelection() != wxNOT_FOUND);
 	execute_button->Enable(list->GetCount() != 0);
+	swap_button->Enable(list->GetCount() != 0);
 }
 
 void ReplaceItemsDialog::OnListSelected(wxCommandEvent& WXUNUSED(event)) {
@@ -433,6 +441,27 @@ void ReplaceItemsDialog::OnExecuteButtonClicked(wxCommandEvent& WXUNUSED(event))
 
 void ReplaceItemsDialog::OnCancelButtonClicked(wxCommandEvent& WXUNUSED(event)) {
 	Close();
+}
+
+void ReplaceItemsDialog::OnSwapButtonClicked(wxCommandEvent& WXUNUSED(event)) {
+	// Get current items list and store them temporarily
+	std::vector<ReplacingItem> tempItems = list->GetItems(); // Make a copy!
+	if(tempItems.empty()) {
+		return;
+	}
+
+	// Clear current list
+	list->Clear();
+
+	// Add swapped items back
+	for(const ReplacingItem& item : tempItems) { // Use the temp copy
+		ReplacingItem swapped;
+		swapped.replaceId = item.withId;
+		swapped.withId = item.replaceId;
+		list->AddItem(swapped);
+	}
+
+	UpdateWidgets();
 }
 
 void ReplaceItemsDialog::RefreshPresetList() {
