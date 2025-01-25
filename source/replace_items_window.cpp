@@ -28,39 +28,39 @@
 #include "doodad_brush.h"
 #include <wx/dir.h>
 #include <wx/tokenzr.h>
-
 /*
  * ! CURRENT TASK:
- * Interactive Item ID Editing in Replace Items Dialog 
- * ------------------------------------------------
- * Transform the static ID display in the replacement list into interactive input fields
+ * Add Remove Items Checkbox to Find Items Dialog
+ * --------------------------------------------
+ * Add functionality to remove found items after finding them
  * 
  * Current Operation:
- * - Items are added to list with single replaceId and withId values
- * - IDs are displayed as static text in format "Replace: X With: Y"
+ * - Dialog finds items based on search criteria and displays results that allow to go to the item in the map
+ * - Items are highlighted/selected when found
  * 
  * Desired Changes:
- * - Create additional input field for replaceId range input and withId static input window left as is
- * - Allow range input in the format "2000-2010,2020" directly in the replaceId additional input field that if populated overloads the main replaceId input window so both for replaceId are present and for withId only the click input window
- * - Support both single IDs(click input window takes care of that) and ranges for the replaceId input
- * - after pressing Add query each item from range to be added 1 by 1 to the list for replaceId.range = withId input
- * 
- * Example Usage:
- * 1. User presses replaceId from palette and withId from palette normal use case
- * 2. User writes in the range for replaceId field and puts withId from palette and pressed Add button adds range of replaceId items to the list for replaceId.range = withId input
- * 3. System automatically handles the range mapping for replacement
+ * - Add checkbox under IgnoredIds section
+ * - Label: "Remove found items"
+ * - When checked, found items will be removed from their positions and the dialog will be refreshed
+ * - Should work with both single and range searches
  * 
  * Technical Requirements:
- * - Replace static text rendering with wxTextCtrl components
- * - Parse range inputs using existing range parsing logic
- * - Update item data immediately when input changes
- * - Maintain undo/redo compatibility
- * - Preserve item metadata and completion status
+ * - Add checkbox member to FindItemDialog class
+ * - Modify search logic to handle item removal
+ * - Ensure proper undo/redo support for removals
+ * - Update item counts and display after removal
  * 
- * Visual Feedback:
- * - Input fields clearly show current values
- * - Invalid inputs are visually indicated
- * - Maintain arrow direction indicator for swap functionality
+ * Visual Layout:
+ * [Existing IgnoredIds section]
+ * [x] Remove found items
+ * [Rest of dialog...]
+ * expand the main window to 800x800 to accomodate new checkbox
+ * 
+ * Implementation Notes:
+ * - Need to handle removal within the map's action system
+ * - Should update statistics after removal
+ * - Consider adding confirmation dialog for large numbers of items
+ * To note there seems to be potential error and some items are not being removed only the first item in list? 
  */
 // ============================================================================
 // ReplaceItemsButton

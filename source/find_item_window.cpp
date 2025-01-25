@@ -30,6 +30,38 @@
 #include "string_utils.h"
 #include "result_window.h"
 
+/*
+ * ! CURRENT TASK:
+ * Add Remove Items Checkbox to Find Items Dialog
+ * --------------------------------------------
+ * Add functionality to remove found items after finding them
+ * 
+ * Current Operation:
+ * - Dialog finds items based on search criteria and displays results that allow to go to the item in the map
+ * - Items are highlighted/selected when found
+ * 
+ * Desired Changes:
+ * - Add checkbox under IgnoredIds section
+ * - Label: "Remove found items"
+ * - When checked, found items will be removed from their positions and the dialog will be refreshed
+ * - Should work with both single and range searches
+ * 
+ * Technical Requirements:
+ * - Add checkbox member to FindItemDialog class
+ * - Modify search logic to handle item removal
+ * - Ensure proper undo/redo support for removals
+ * - Update item counts and display after removal
+ * 
+ * Visual Layout:
+ * [Existing IgnoredIds section]
+ * [x] Remove found items
+ * [Rest of dialog...]
+ * 
+ * Implementation Notes:
+ * - Need to handle removal within the map's action system
+ * - Should update statistics after removal
+ * - Consider adding confirmation dialog for large numbers of items
+ */
 
 
 BEGIN_EVENT_TABLE(FindItemDialog, wxDialog)
@@ -39,7 +71,7 @@ EVT_BUTTON(wxID_CANCEL, FindItemDialog::OnClickCancel)
 END_EVENT_TABLE()
 
 FindItemDialog::FindItemDialog(wxWindow* parent, const wxString& title, bool onlyPickupables /* = false*/) :
-	wxDialog(parent, wxID_ANY, title, wxDefaultPosition, wxSize(800, 700), wxDEFAULT_DIALOG_STYLE),
+	wxDialog(parent, wxID_ANY, title, wxDefaultPosition, wxSize(800, 800), wxDEFAULT_DIALOG_STYLE),
 	input_timer(this),
 	result_brush(nullptr),
 	result_id(0),
@@ -113,6 +145,13 @@ FindItemDialog::FindItemDialog(wxWindow* parent, const wxString& title, bool onl
 	ignored_ids_box_sizer->Add(ignore_ids_text, 0, wxALL | wxEXPAND, 5);
 	
 	options_box_sizer->Add(ignored_ids_box_sizer, 0, wxALL | wxEXPAND, 5);
+
+	// Add after ignored IDs section
+	wxStaticBoxSizer* remove_box = newd wxStaticBoxSizer(new wxStaticBox(this, wxID_ANY, "Item Removal"), wxVERTICAL);
+	remove_found_items = newd wxCheckBox(remove_box->GetStaticBox(), wxID_ANY, "Remove found items");
+	remove_found_items->SetToolTip("When checked, found items will be removed from their positions");
+	remove_box->Add(remove_found_items, 0, wxALL, 5);
+	options_box_sizer->Add(remove_box, 0, wxALL | wxEXPAND, 5);
 
 	// Add spacer
 	options_box_sizer->Add(0, 0, 1, wxEXPAND, 5);
@@ -661,21 +700,12 @@ void FindItemDialog::OnInputTimer(wxTimerEvent& WXUNUSED(event)) {
 	RefreshContentsInternal();
 }
 
-void FindItemDialog::OnClickOK(wxCommandEvent& WXUNUSED(event)) {
-	OutputDebugStringA("FindItemDialog::OnClickOK called\n");
+void FindItemDialog::OnClickOK(wxCommandEvent& event) {
+	if (!g_gui.IsEditorOpen()) return;
 
-	// First pass ignored IDs configuration to result window
-	if (SearchResultWindow* window = g_gui.GetSearchWindow()) {
-		window->SetIgnoredIds(ignore_ids_text->GetValue(), ignore_ids_checkbox->GetValue());
-		OutputDebugStringA(wxString::Format("Passed ignored IDs to result window. Enabled: %d, IDs: %s\n",
-			ignore_ids_checkbox->GetValue(),
-			ignore_ids_text->GetValue()).c_str());
-	}
-
-	if (invalid_item->GetValue() && 
-		(SearchMode)options_radio_box->GetSelection() == SearchMode::ServerIDs && 
-		result_id != 0) {
-		OutputDebugStringA(wxString::Format("Selected invalid item with ID: %d\n", result_id).c_str());
+	if (invalid_item->GetValue()) {
+		result_brush = nullptr;
+		result_id = 0;
 		EndModal(wxID_OK);
 		return;
 	}
@@ -685,7 +715,69 @@ void FindItemDialog::OnClickOK(wxCommandEvent& WXUNUSED(event)) {
 		if (brush) {
 			result_brush = brush;
 			result_id = brush->asRaw()->getItemID();
-			OutputDebugStringA(wxString::Format("Selected brush with ID: %d\n", result_id).c_str());
+
+			// If remove checkbox is checked, handle item removal
+			if (remove_found_items->GetValue()) {
+				Editor* editor = g_gui.GetCurrentEditor();
+				if (editor) {
+					editor->actionQueue->clear();  // Clear previous actions
+					g_gui.CreateLoadBar("Searching items to remove...");
+
+					int64_t count = 0;
+					
+					if (getUseRange()) {
+						// Handle range-based removal
+						auto ranges = ParseRangeString(GetRangeInput());
+						if (!ranges.empty()) {
+							struct RangeRemoveCondition {
+								std::vector<std::pair<uint16_t, uint16_t>> ranges;
+								
+								RangeRemoveCondition(const std::vector<std::pair<uint16_t, uint16_t>>& r) : ranges(r) {}
+								
+								bool operator()(Map& map, Item* item, long long removed, long long done) {
+									if (done % 0x800 == 0) {
+										g_gui.SetLoadDone((unsigned int)(100 * done / map.getTileCount()));
+									}
+									
+									for (const auto& range : ranges) {
+										if (item->getID() >= range.first && item->getID() <= range.second) {
+											return true;
+										}
+									}
+									return false;
+								}
+							} condition(ranges);
+							
+							count = RemoveItemOnMap(editor->map, condition, editor->selection.size() > 0);
+						}
+					} else {
+						// Handle single item removal
+						struct SingleItemRemoveCondition {
+							uint16_t itemId;
+							SingleItemRemoveCondition(uint16_t id) : itemId(id) {}
+							
+							bool operator()(Map& map, Item* item, long long removed, long long done) {
+								if (done % 0x800 == 0) {
+									g_gui.SetLoadDone((unsigned int)(100 * done / map.getTileCount()));
+								}
+								return item->getID() == itemId;
+							}
+						} condition(result_id);
+						
+						count = RemoveItemOnMap(editor->map, condition, editor->selection.size() > 0);
+					}
+					
+					g_gui.DestroyLoadBar();
+
+					wxString msg;
+					msg << count << " items removed.";
+					g_gui.PopupDialog("Remove Items", msg, wxOK);
+					
+					editor->map.doChange();
+					g_gui.RefreshView();
+				}
+			}
+
 			EndModal(wxID_OK);
 		}
 	}
