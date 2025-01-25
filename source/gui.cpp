@@ -15,6 +15,138 @@
 // along with this program. If not, see <http://www.gnu.org/licenses/>.
 //////////////////////////////////////////////////////////////////////
 
+/*
+ * TASK: Refresh Custom Palette After Selection to Doodad Conversion
+ * --------------------------------------------------------------
+ * 
+ * Current Behavior:
+ * - Selection to Doodad menu item creates a doodad brush from selected items
+ * - Brush is saved as XML but not immediately visible in palette
+ * 
+ * Required Changes:
+ * 1. Palette Update
+ *    - After doodad creation, refresh custom brushes palette
+ *    - New doodad should appear at the top of custom brushes list
+ *    - Maintain proper sorting/grouping of brushes
+ * 
+ * Implementation Steps:
+ * 1. Add Palette Refresh Function
+ *    - Create method in GUI class to reload custom brushes
+ *    - Clear existing custom brush entries
+ *    - Reload all XML brush definitions
+ *    - Sort brushes according to current palette settings
+ * 
+ * 2. Update Selection to Doodad Handler
+ *    - After successful doodad creation and XML save
+ *    - Call palette refresh function
+ *    - Select newly created brush in palette
+ * 
+ * 3. XML Integration
+ *    - Ensure proper XML file naming for new doodad
+ *    - Maintain brush metadata for palette organization
+ *    - Handle file paths consistently
+ * 
+ * Technical Requirements:
+ * - Access to palette window through g_gui
+ * - Proper brush management in BrushManager
+ * - XML file handling for brush definitions
+ * - Maintain undo/redo compatibility
+ * 
+ * Files to Modify:
+ * - gui.cpp/h: Add refresh function
+ * - palette_window.cpp: Update brush list
+ * - doodad_brush.cpp: XML handling
+ * 
+ * Related Code:
+ * - Selection to Doodad conversion (main_menubar.cpp)
+ * - Palette management (palette_window.cpp)
+ * - Brush XML handling (brush.cpp)
+ */
+
+/*
+ * TASK: Refresh Custom Palette After Selection to Doodad Conversion
+ * --------------------------------------------------------------
+ * 
+ * IMPLEMENTATION OPTIONS:
+ * 
+ * 1. QUICK REFRESH (Simple but Inefficient)
+ * ---------------------------------------
+ * - Use existing PaletteWindow::InvalidateContents()
+ * - Call g_gui.RefreshPalettes() after doodad creation
+ * Code:
+ * ```cpp
+ * PaletteWindow* palette = dynamic_cast<PaletteWindow*>(g_gui.GetPalette());
+ * if(palette) {
+ *     palette->InvalidateContents();
+ *     palette->SelectPage(TILESET_DOODAD);
+ * }
+ * g_gui.RefreshPalettes();
+ * ```
+ * Pros: Simple, uses existing methods
+ * Cons: Reloads entire palette, inefficient
+ * 
+ * 2. TARGETED REFRESH (Balanced)
+ * ---------------------------
+ * - Add refresh method to BrushPalettePanel
+ * - Only reload doodad brushes section
+ * - Update specific palette page
+ * Code:
+ * ```cpp
+ * class BrushPalettePanel {
+ *     void ReloadDoodadBrushes() {
+ *         // Clear and reload only doodad brushes
+ *         LoadDoodadBrushes();
+ *         Refresh();
+ *     }
+ * };
+ * ```
+ * Pros: More efficient, better UX
+ * Cons: Requires new methods in palette classes
+ * 
+ * 3. REACTIVE SYSTEM (Complex but Robust)
+ * -----------------------------------
+ * - Implement observer pattern for brush changes
+ * - Palettes subscribe to brush manager updates
+ * - Auto-refresh when brushes change
+ * Code:
+ * ```cpp
+ * class BrushManager {
+ *     std::vector<BrushObserver*> observers;
+ *     void NotifyBrushChange(BrushCategory category) {
+ *         for(auto* observer : observers) {
+ *             observer->OnBrushesChanged(category);
+ *         }
+ *     }
+ * };
+ * ```
+ * Pros: Clean architecture, handles all brush changes
+ * Cons: Major refactoring required
+ * 
+ * 4. HYBRID APPROACH (Recommended)
+ * -----------------------------
+ * - Use existing GUI methods but add targeted refresh
+ * - Add doodad-specific refresh to PaletteWindow
+ * - Maintain current architecture while improving efficiency
+ * Code:
+ * ```cpp
+ * class PaletteWindow {
+ *     void RefreshDoodadPalette() {
+ *         // Refresh only doodad page
+ *         if(brush_panel) {
+ *             brush_panel->LoadDoodadBrushes();
+ *             SelectPage(TILESET_DOODAD);
+ *         }
+ *     }
+ * };
+ * ```
+ * Pros: 
+ * - Balance of efficiency and simplicity
+ * - Minimal changes to existing code
+ * - Maintains current architecture
+ * Cons:
+ * - Still requires some new methods
+ * - Not as elegant as full reactive system
+ */
 #include "main.h"
 
 #include <wx/display.h>

@@ -728,6 +728,14 @@
 		</raw>
 	</tileset>
 
+
+	<tileset name="Customs">
+		<doodad>
+			
+			<brush name="custom_1"/>
+		</doodad>
+	</tileset>
+
 	<tileset name="Beds">
 		<doodad>
 			<!-- beds -->

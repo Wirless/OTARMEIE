@@ -20,6 +20,8 @@
 #include <sstream>
 #include <time.h>
 #include <wx/wfstream.h>
+#include <wx/xml/xml.h>
+#include <algorithm>
 
 #include "gui.h"
 #include "editor.h"
@@ -37,6 +39,8 @@
 #include "live_server.h"
 #include "browse_tile_window.h"
 
+#include "minimap_window.h"
+
 #include "doodad_brush.h"
 #include "house_exit_brush.h"
 #include "house_brush.h"
@@ -48,7 +52,8 @@
 #include "raw_brush.h"
 #include "carpet_brush.h"
 #include "table_brush.h"
-#include "minimap_window.h"  // Add this include
+#include "materials.h"
+#include "selection.h"
 
 BEGIN_EVENT_TABLE(MapCanvas, wxGLCanvas)
 EVT_KEY_DOWN(MapCanvas::OnKeyDown)
@@ -103,6 +108,8 @@ EVT_MENU(MAP_POPUP_MENU_MOVE_TO_TILESET, MapCanvas::OnSelectMoveTo)
 EVT_MENU(MAP_POPUP_MENU_PROPERTIES, MapCanvas::OnProperties)
 // ----
 EVT_MENU(MAP_POPUP_MENU_BROWSE_TILE, MapCanvas::OnBrowseTile)
+// Add to the event table after other MAP_POPUP_MENU items
+EVT_MENU(MAP_POPUP_MENU_SELECTION_TO_DOODAD, MapCanvas::OnSelectionToDoodad)
 
 END_EVENT_TABLE()
 
@@ -2418,6 +2425,9 @@ void MapPopupMenu::Update() {
 	wxMenuItem* fillItem = Append(MAP_POPUP_MENU_FILL, "&Fill Area", "Fill enclosed area with current brush");
 	fillItem->Enable(g_gui.GetCurrentBrush() != nullptr);
 
+	wxMenuItem* selectionToDoodadItem = Append(MAP_POPUP_MENU_SELECTION_TO_DOODAD, "&Selection to Doodad", "Create a doodad brush from the selected items");
+	selectionToDoodadItem->Enable(anything_selected);
+
 	if (anything_selected) {
 		if (editor.selection.size() == 1) {
 			Tile* tile = editor.selection.getSelectedTile();
@@ -2873,4 +2883,269 @@ void MapCanvas::OnFill(wxCommandEvent& WXUNUSED(event)) {
     g_gui.RefreshView();
 
     OutputDebugStringA("Fill operation completed successfully.\n");
+}
+
+void MapCanvas::OnSelectionToDoodad(wxCommandEvent& WXUNUSED(event)) {
+    OutputDebugStringA("INITIATING DOODAD CREATION PROTOCOL! MUAHAHAHA!\n");
+
+    if (editor.selection.size() == 0) {
+        OutputDebugStringA("OH THE HUMANITY! THE SELECTION IS AS EMPTY AS MY SOUL!\n");
+        g_gui.PopupDialog(this, "Error", "Y U GIVE EMPTY SELECTION?! (╯°□°）╯︵ ┻━┻", wxOK);
+        return;
+    }
+
+    OutputDebugStringA(wxString::Format("DETECTED %d TILES! TIME TO PERFORM UNSPEAKABLE ACTS OF XML CREATION!\n", 
+        editor.selection.size()).c_str());
+
+    Position minPos(0xFFFF, 0xFFFF, 0xFFFF);
+    Position maxPos(0, 0, 0);
+    
+    int tileCount = 0;
+    int totalItems = 0;
+    std::map<Position, std::vector<uint16_t>> tileItems;
+    
+    OutputDebugStringA("COMMENCING TILE INSPECTION! RESISTANCE IS FUTILE!\n");
+    
+    for(auto tile : editor.selection) {
+        if(!tile) {
+            OutputDebugStringA("FOUND A NULL TILE! THE VOID BECKONS! IA! IA!\n");
+            continue;
+        }
+        
+        Position tilePos(tile->getX(), tile->getY(), tile->getZ());
+        
+        // Get ALL items from the tile using Map's methods
+        if(tile->ground) {
+            tileItems[tilePos].push_back(tile->ground->getID());
+            totalItems++;
+            OutputDebugStringA(wxString::Format("GROUND ESSENCE %d HARVESTED FROM %d,%d,%d! THE EARTH WEEPS!\n", 
+                tile->ground->getID(), tilePos.x, tilePos.y, tilePos.z).c_str());
+        }
+
+        // Get all items, including borders
+        const ItemVector& items = tile->items;
+        for(Item* item : items) {
+            if(!item) continue;
+            
+            // We want EVERYTHING! MWAHAHAHA!
+            tileItems[tilePos].push_back(item->getID());
+            totalItems++;
+            OutputDebugStringA(wxString::Format("ITEM %d HAS BEEN ASSIMILATED FROM %d,%d,%d! RESISTANCE IS FUTILE!\n", 
+                item->getID(), tilePos.x, tilePos.y, tilePos.z).c_str());
+        }
+
+        if(!tileItems[tilePos].empty()) {
+            OutputDebugStringA(wxString::Format("BEHOLD! TILE %d,%d,%d CONTAINS %zu SACRIFIC-- I MEAN ITEMS! STARTING WITH ID %d!\n", 
+                tilePos.x, tilePos.y, tilePos.z, 
+                tileItems[tilePos].size(),
+                tileItems[tilePos].front()).c_str());
+        } else {
+            OutputDebugStringA(wxString::Format("THE TILE AT %d,%d,%d IS BARREN! THE HORROR! THE HORROR!\n",
+                tilePos.x, tilePos.y, tilePos.z).c_str());
+        }
+        
+        tileCount++;
+        minPos.x = std::min(minPos.x, tilePos.x);
+        minPos.y = std::min(minPos.y, tilePos.y);
+        minPos.z = std::min(minPos.z, tilePos.z);
+        maxPos.x = std::max(maxPos.x, tilePos.x);
+        maxPos.y = std::max(maxPos.y, tilePos.y);
+        maxPos.z = std::max(maxPos.z, tilePos.z);
+    }
+
+    OutputDebugStringA(wxString::Format("ANALYSIS COMPLETE!\nTILES PROCESSED: %d\nITEMS ASSIMILATED: %d\nTHE HARVEST IS GOOD!\n", 
+        tileCount, totalItems).c_str());
+
+    // ... rest of XML handling with similar unhinged messages ...
+
+    OutputDebugStringA(wxString::Format("MWAHAHAHA! ACQUIRED %d ITEMS FROM %d TILES! THE COLLECTION GROWS!\n", 
+        totalItems, tileCount).c_str());
+
+    if(totalItems == 0) {
+        OutputDebugStringA("WHAT IS THIS MADNESS?! NO ITEMS TO STEAL?! INCONCEIVABLE!\n");
+        g_gui.PopupDialog(this, "Error", "WHERE ARE THE ITEMS?! ┻━┻ ︵ヽ(`Д´)ﾉ︵ ┻━┻", wxOK);
+        return;
+    }
+
+    // PREPARE THE SACRED XML RITUAL!
+    wxString versionString = g_gui.GetCurrentVersion().getName();
+    std::string versionStr = std::string(versionString.mb_str());
+    versionStr.erase(std::remove(versionStr.begin(), versionStr.end(), '.'), versionStr.end());
+    
+    // Get the proper data directory paths
+    FileName doodadsPath = g_gui.GetDataDirectory();
+    doodadsPath.SetPath(doodadsPath.GetPath() + "/" + versionStr);
+    doodadsPath.SetName("doodads.xml");
+    
+    FileName tilesetsPath = g_gui.GetDataDirectory();
+    tilesetsPath.SetPath(tilesetsPath.GetPath() + "/" + versionStr);
+    tilesetsPath.SetName("tilesets.xml");
+    
+    wxString doodadsPathStr = doodadsPath.GetFullPath();
+    wxString tilesetsPathStr = tilesetsPath.GetFullPath();
+    
+    // First handle doodads.xml - this gets the full brush pattern
+    wxXmlDocument doodadsDoc;
+    if(!doodadsDoc.Load(doodadsPathStr)) {
+        OutputDebugStringA("THE DOODADS TOME DOES NOT EXIST! CREATING A NEW ONE!\n");
+        wxXmlNode* root = new wxXmlNode(wxXML_ELEMENT_NODE, "materials");
+        doodadsDoc.SetRoot(root);
+    }
+
+    // Find highest custom number through DARK MAGIC
+    int highestNum = 0;
+    wxXmlNode* doodadsRoot = doodadsDoc.GetRoot();
+    for(wxXmlNode* node = doodadsRoot->GetChildren(); node; node = node->GetNext()) {
+        if(node->GetName() == "brush") {
+            wxString name = node->GetAttribute("name");
+            if(name.StartsWith("custom_")) {
+                long num;
+                if(name.Mid(7).ToLong(&num)) {
+                    highestNum = std::max(highestNum, (int)num);
+                }
+            }
+        }
+    }
+
+    const std::string newBrushName = "custom_" + std::to_string(highestNum + 1);
+    OutputDebugStringA(wxString::Format("BEHOLD! NEW BRUSH SHALL BE NAMED %s!\n", newBrushName.c_str()).c_str());
+
+    // Create the ULTIMATE BRUSH NODE with full pattern
+    wxXmlNode* newBrushNode = new wxXmlNode(wxXML_ELEMENT_NODE, "brush");
+    newBrushNode->AddAttribute("name", newBrushName);
+    newBrushNode->AddAttribute("type", "doodad");
+    newBrushNode->AddAttribute("server_lookid", wxString::Format("%d", tileItems.begin()->second.front()));
+    newBrushNode->AddAttribute("draggable", "true");
+    newBrushNode->AddAttribute("on_blocking", "true");
+    newBrushNode->AddAttribute("thickness", "100/100");
+
+    // Create the alternate/composite structure
+    wxXmlNode* alternateNode = new wxXmlNode(wxXML_ELEMENT_NODE, "alternate");
+    wxXmlNode* compositeNode = new wxXmlNode(wxXML_ELEMENT_NODE, "composite");
+    compositeNode->AddAttribute("chance", "10");
+
+    // Add ALL the items to their relative positions
+    for(const auto& tilePair : tileItems) {
+        const Position& pos = tilePair.first;
+        int relX = pos.x - minPos.x;
+        int relY = pos.y - minPos.y;
+        
+        // Create tile node once per position
+        wxXmlNode* tileNode = new wxXmlNode(wxXML_ELEMENT_NODE, "tile");
+        tileNode->AddAttribute("x", wxString::Format("%d", relX));
+        tileNode->AddAttribute("y", wxString::Format("%d", relY));
+        
+        // Add all items for this tile position in the correct order
+        for(uint16_t itemId : tilePair.second) {
+            wxXmlNode* itemNode = new wxXmlNode(wxXML_ELEMENT_NODE, "item");
+            itemNode->AddAttribute("id", wxString::Format("%d", itemId));
+            tileNode->AddChild(itemNode);
+        }
+        
+        compositeNode->AddChild(tileNode);
+    }
+
+    alternateNode->AddChild(compositeNode);
+    newBrushNode->AddChild(alternateNode);
+    doodadsDoc.GetRoot()->AddChild(newBrushNode);
+
+    // Save doodads.xml
+    if(!doodadsDoc.Save(doodadsPathStr)) {
+        OutputDebugStringA("THE DOODADS TOME RESISTS OUR CHANGES!\n");
+        g_gui.PopupDialog(this, "Error", "Could not write to doodads.xml!", wxOK);
+        return;
+    }
+
+    // Now handle tilesets.xml - just add the brush name reference
+    wxXmlDocument tilesetsDoc;
+    if(!tilesetsDoc.Load(tilesetsPathStr)) {
+        OutputDebugStringA("THE TILESETS TOME IS MISSING! THE RITUAL IS INCOMPLETE!\n");
+        g_gui.PopupDialog(this, "Error", "Could not open tilesets.xml!", wxOK);
+        return;
+    }
+
+    // Find Custom tileset among other tilesets
+    wxXmlNode* tilesetsRoot = tilesetsDoc.GetRoot();
+    wxXmlNode* customTileset = nullptr;
+
+    // Search for Custom tileset among other tilesets
+    for(wxXmlNode* node = tilesetsRoot->GetChildren(); node; node = node->GetNext()) {
+        if(node->GetName() == "tileset" && node->GetAttribute("name") == "Custom") {
+            customTileset = node;
+            break;
+        }
+    }
+
+    if(!customTileset) {
+        OutputDebugStringA("THE CUSTOM TILESET IS MISSING! ADDING IT ALONGSIDE OTHER TILESETS!\n");
+        // Create new Custom tileset at same level as other tilesets
+        customTileset = new wxXmlNode(wxXML_ELEMENT_NODE, "tileset");
+        customTileset->AddAttribute("name", "Custom");
+        
+        // Add it after existing tilesets
+        tilesetsRoot->AddChild(customTileset);
+    }
+
+    // Find or create doodad section within Custom tileset
+    wxXmlNode* doodadNode = nullptr;
+    for(wxXmlNode* node = customTileset->GetChildren(); node; node = node->GetNext()) {
+        if(node->GetName() == "doodad") {
+            doodadNode = node;
+            break;
+        }
+    }
+
+    if(!doodadNode) {
+        OutputDebugStringA("CANNOT FIND DOODAD SECTION IN CUSTOM TILESET! CREATING IT!\n");
+        doodadNode = new wxXmlNode(wxXML_ELEMENT_NODE, "doodad");
+        customTileset->AddChild(doodadNode);
+    }
+
+    // Add just the brush name reference
+    wxXmlNode* brushRef = new wxXmlNode(wxXML_ELEMENT_NODE, "brush");
+    brushRef->AddAttribute("name", newBrushName);
+    doodadNode->AddChild(brushRef);
+
+    // Save tilesets.xml
+    if(!tilesetsDoc.Save(tilesetsPathStr)) {
+        OutputDebugStringA("THE TILESETS TOME RESISTS OUR CHANGES!\n");
+        g_gui.PopupDialog(this, "Error", "Could not write to tilesets.xml!", wxOK);
+        return;
+    }
+
+    OutputDebugStringA("THE RITUAL IS COMPLETE! THE DOODAD HAS BEEN BOUND TO BOTH TOMES!\n");
+    g_gui.PopupDialog(this, "Success", "IT'S ALIVE! IT'S ALIVE! Created: " + newBrushName, wxOK);
+// Get the palette window and force refresh
+    // First try the LoadVersion approach to force a complete reload
+    wxString error;
+    wxArrayString warnings;
+    
+    OutputDebugStringA("INITIATING DARK RITUAL OF PALETTE RECONSTRUCTION!\n");
+    
+    if(!g_gui.LoadVersion(g_gui.GetCurrentVersionID(), error, warnings, true)) {
+        OutputDebugStringA("THE RITUAL HAS FAILED! FALLING BACK TO PLAN B!\n");
+        
+        // Fallback to manual palette refresh
+        PaletteWindow* palette = dynamic_cast<PaletteWindow*>(g_gui.GetPalette());
+        if(palette) {
+            OutputDebugStringA("COMMANDING THE PALETTE TO RECONSTRUCT ITSELF!\n");
+            palette->InvalidateContents();  // Forces complete reload
+            palette->SelectPage(TILESET_DOODAD);
+            g_gui.RefreshPalettes();
+        } else {
+            OutputDebugStringA("FAILED TO FIND THE PALETTE! THE VOID CONSUMES ALL!\n");
+            g_gui.PopupDialog(this, "Error", "Failed to refresh palette!", wxOK);
+            return;
+        }
+    } else {
+        // LoadVersion succeeded, just need to switch to doodad page
+        PaletteWindow* palette = dynamic_cast<PaletteWindow*>(g_gui.GetPalette());
+        if(palette) {
+            OutputDebugStringA("THE RITUAL NEARS COMPLETION! SUMMONING NEW DOODAD!\n");
+            palette->SelectPage(TILESET_DOODAD);
+        }
+    }
+
+    // Show success message
+    g_gui.PopupDialog(this, "Success", "IT'S ALIVE! IT'S ALIVE! Created: " + newBrushName, wxOK);
 }

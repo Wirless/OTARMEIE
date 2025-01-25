@@ -89,6 +89,8 @@ public:
 	void OnSelectHouseBrush(wxCommandEvent& event);
 	void OnSelectCollectionBrush(wxCommandEvent& event);
 	void OnSelectMoveTo(wxCommandEvent& event);
+
+	void OnSelectionToDoodad(wxCommandEvent& event);
 	// ---
 	void OnProperties(wxCommandEvent& event);
 	void OnFill(wxCommandEvent& event);
