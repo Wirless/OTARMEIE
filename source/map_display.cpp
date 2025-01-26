@@ -22,33 +22,41 @@ COLLECTIONS REFACTORING TASK 2.0
 ============================================================================
 
 OBJECTIVE:
-Moving from tilesets.xml organization to collections.xml category-based 
+Moving from tilesets.xml organization to collections.xml more empty XML file organization for better item/brush management.
 organization for better item/brush management.
 
 CURRENT STATUS:
-X Basic CategorySelectionDialog implemented [for now not needed]
-✓ Doodads.xml saving working 
-✓ Collections.xml integration started 
+X Basic CategorySelectionDialog implemented
+✓ Doodads.xml saving working with pugixml
+✓ Collections.xml integration started
+✓ Auto-creation of tilesets in collections.xml
 
 REMAINING TASKS:
 
-1. Collections Integration
-   - Ensure collections.xml is properly included in materials.xml
-   - Uncomment <include file="collections.xml"/> in materials.xml
-   - Verify collections.xml is loaded with other material files
+1. Selection Ground Handling
+   - Add ground tiles inside selection borders to brush
+   - Detect filler items inside selection borders!
+   - Empty areas inside selection without any items/grounds is not filled ✓ good.
+   - Handle multiple ground types intelligently
+   - Preserve ground layer hierarchy
 
-2. Brush Management
-   - Move custom brush references from tilesets.xml to collections.xml
-   - Remove custom category from tilesets.xml
-   - Update brush loading to prioritize collections.xml
+2. Collections Integration
+   - Ensure collections.xml is properly included in materials.xml ✓
+   - Uncomment <include file="collections.xml"/> in materials.xml ✓
+   - Verify collections.xml is loaded with other material files ✓ 2 done.
 
-3. UI Enhancements
-   - Add brush name input field to CategorySelectionDialog
-   - Validate brush names against existing doodads.xml entries
-   - Add preview of brush pattern in dialog
-   - Add category creation option
+3. Brush Management
+   - Move custom brush references from tilesets.xml to collections.xml ✓
+   - Remove custom category from tilesets.xml ✓
+   - Update brush loading to prioritize collections.xml ✓ 3. done
 
-4. File Structure Updates:
+4. UI Enhancements
+   - Add brush name input field to CategorySelectionDialog Ignore for now.
+   - Validate brush names against existing doodads.xml entries Ignore for now.
+   - Add preview of brush pattern in dialog Ignore for now.
+   - Add category creation option Ignore for now.
+
+5. File Structure Updates:
    collections.xml:
    <materials>
      <tileset name="Category">
@@ -59,22 +67,24 @@ REMAINING TASKS:
      </tileset>
    </materials>
 
-5. Migration Plan
-   - Create migration tool/function to move existing custom brushes
-   - Update palette loading to handle both systems during transition
-   - Add version check for backward compatibility
+6. Migration Plan Ignore
+   - Create migration tool/function to move existing custom brushes Ignore for now.
+   - Update palette loading to handle both systems during transition Ignore for now.
+   - Add version check for backward compatibility Ignore for now.
 
-6. Testing Requirements
-   - Test brush creation in different categories
-   - Verify palette updates after brush addition
-   - Test brush loading after editor restart
-   - Verify backward compatibility
+7. Testing Requirements
+   - Test brush creation in different categories ✓
+   - Verify palette updates after brush addition✓
+   - Test brush loading after editor restart✓
+   - Verify backward compatibility✓
+   - Test ground filling in various selection patterns✓
 
 IMPLEMENTATION NOTES:
 - Use pugixml for all XML operations
 - Maintain error handling and user feedback
 - Keep existing palette refresh mechanism
 - Consider adding undo/redo support for brush management
+- Ground filling should respect map boundaries and existing items
 
 ============================================================================
 */
