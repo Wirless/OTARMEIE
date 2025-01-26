@@ -16,78 +16,7 @@
 //////////////////////////////////////////////////////////////////////
 
 
-/*
-============================================================================
-COLLECTIONS REFACTORING TASK 2.0
-============================================================================
 
-OBJECTIVE:
-Moving from tilesets.xml organization to collections.xml more empty XML file organization for better item/brush management.
-organization for better item/brush management.
-
-CURRENT STATUS:
-X Basic CategorySelectionDialog implemented
-✓ Doodads.xml saving working with pugixml
-✓ Collections.xml integration started
-✓ Auto-creation of tilesets in collections.xml
-
-REMAINING TASKS:
-
-1. Selection Ground Handling
-   - Add ground tiles inside selection borders to brush
-   - Detect filler items inside selection borders!
-   - Empty areas inside selection without any items/grounds is not filled ✓ good.
-   - Handle multiple ground types intelligently
-   - Preserve ground layer hierarchy
-
-2. Collections Integration
-   - Ensure collections.xml is properly included in materials.xml ✓
-   - Uncomment <include file="collections.xml"/> in materials.xml ✓
-   - Verify collections.xml is loaded with other material files ✓ 2 done.
-
-3. Brush Management
-   - Move custom brush references from tilesets.xml to collections.xml ✓
-   - Remove custom category from tilesets.xml ✓
-   - Update brush loading to prioritize collections.xml ✓ 3. done
-
-4. UI Enhancements
-   - Add brush name input field to CategorySelectionDialog Ignore for now.
-   - Validate brush names against existing doodads.xml entries Ignore for now.
-   - Add preview of brush pattern in dialog Ignore for now.
-   - Add category creation option Ignore for now.
-
-5. File Structure Updates:
-   collections.xml:
-   <materials>
-     <tileset name="Category">
-       <collections>
-         <brush name="brush_name"/>
-         <item id="item_id"/>
-       </collections>
-     </tileset>
-   </materials>
-
-6. Migration Plan Ignore
-   - Create migration tool/function to move existing custom brushes Ignore for now.
-   - Update palette loading to handle both systems during transition Ignore for now.
-   - Add version check for backward compatibility Ignore for now.
-
-7. Testing Requirements
-   - Test brush creation in different categories ✓
-   - Verify palette updates after brush addition✓
-   - Test brush loading after editor restart✓
-   - Verify backward compatibility✓
-   - Test ground filling in various selection patterns✓
-
-IMPLEMENTATION NOTES:
-- Use pugixml for all XML operations
-- Maintain error handling and user feedback
-- Keep existing palette refresh mechanism
-- Consider adding undo/redo support for brush management
-- Ground filling should respect map boundaries and existing items
-
-============================================================================
-*/
 
 
 #include "main.h"
@@ -3078,6 +3007,43 @@ void MapCanvas::OnFill(wxCommandEvent& WXUNUSED(event)) {
     }
 }
 
+/*
+============================================================================
+SELECTION TO DOODAD BRUSH TASK
+============================================================================
+
+OBJECTIVE:
+Ensure proper handling of ground tiles and borders when converting area selections 
+to doodad brushes.
+
+CURRENT BEHAVIOR:
+- Individual item selection works correctly
+- Ground tiles are lost when border items are present in full area selection
+- Border items are properly preserved
+- Collections.xml integration working
+- Doodads.xml saving working
+
+REQUIRED BEHAVIOR:
+- Ground tiles must be preserved even when border items exist unless it is partial layer selection and not full tile selection if on single tile is more than 1 item selected it means its full tile selection
+- Item stacking order must be maintained:
+  1. Ground tiles first
+  2. Border items next
+  3. Other items last
+- All items from selected tiles must be included
+- No items should be lost due to presence of borders
+- items should be sorted by layer order and placed in the correct order in the doodad brush without removing any previous items in layer
+
+IMPLEMENTATION NOTES:
+- Use tile->ground for ground layer items
+- Check isBorder() for border items
+- Maintain proper XML structure in doodads.xml
+- Update collections.xml name reference to match doodads (it already does that)
+- Preserve all item properties
+
+============================================================================
+*/
+
+
 void MapCanvas::OnSelectionToDoodad(wxCommandEvent& WXUNUSED(event)) {
     OutputDebugStringA("INITIATING DOODAD CREATION PROTOCOL! MUAHAHAHA!\n");
 
@@ -3095,65 +3061,71 @@ void MapCanvas::OnSelectionToDoodad(wxCommandEvent& WXUNUSED(event)) {
     
     int tileCount = 0;
     int totalItems = 0;
-    std::map<Position, std::vector<uint16_t>> tileItems;
+    std::map<Position, std::vector<Item*>> tileItems;
     
     OutputDebugStringA("COMMENCING TILE INSPECTION! RESISTANCE IS FUTILE!\n");
     
     for(auto tile : editor.selection) {
         if(!tile) {
-            OutputDebugStringA("FOUND A NULL TILE! THE VOID BECKONS! IA! IA!\n");
+            OutputDebugStringA("FOUND NULL TILE! SKIPPING...\n");
             continue;
         }
         
         Position tilePos(tile->getX(), tile->getY(), tile->getZ());
-        bool hasSelectedItems = false;
-
-        // First check for specifically selected items
+        OutputDebugStringA(wxString::Format("Processing tile at %d,%d,%d\n", 
+            tilePos.x, tilePos.y, tilePos.z).c_str());
+        
+        // Count selected items on this tile
+        int selectedItemCount = 0;
         for(Item* item : tile->items) {
             if(item && item->isSelected()) {
-                tileItems[tilePos].push_back(item->getID());
-                totalItems++;
-                hasSelectedItems = true;
-                OutputDebugStringA(wxString::Format("SELECTED ITEM %d HARVESTED FROM %d,%d,%d! THE CHOSEN ONE!\n", 
-                    item->getID(), tilePos.x, tilePos.y, tilePos.z).c_str());
+                selectedItemCount++;
             }
         }
+        
+        OutputDebugStringA(wxString::Format("Found %d selected items on tile\n", selectedItemCount));
 
-        // If no specific items selected but tile is selected, grab all items
-        if(!hasSelectedItems && tile->isSelected()) {
+        // If multiple items are selected or tile is fully selected, preserve entire tile
+        if(selectedItemCount > 1 || tile->isSelected()) {
+            // Add ground first if it exists
             if(tile->ground) {
-                tileItems[tilePos].push_back(tile->ground->getID());
+                tileItems[tilePos].push_back(tile->ground);
                 totalItems++;
-                OutputDebugStringA(wxString::Format("GROUND ESSENCE %d HARVESTED FROM %d,%d,%d! THE EARTH WEEPS!\n", 
-                    tile->ground->getID(), tilePos.x, tilePos.y, tilePos.z).c_str());
+                OutputDebugStringA(wxString::Format("Adding ground %d from full tile\n", 
+                    tile->ground->getID()));
             }
-
+            
+            // Add all items in their original order
             for(Item* item : tile->items) {
                 if(!item) continue;
-                tileItems[tilePos].push_back(item->getID());
+                tileItems[tilePos].push_back(item);
                 totalItems++;
-                OutputDebugStringA(wxString::Format("ITEM %d HAS BEEN ASSIMILATED FROM %d,%d,%d! RESISTANCE IS FUTILE!\n", 
-                    item->getID(), tilePos.x, tilePos.y, tilePos.z).c_str());
+                OutputDebugStringA(wxString::Format("Adding item %d from full tile\n", 
+                    item->getID()));
             }
         }
-
-        if(!tileItems[tilePos].empty()) {
-            OutputDebugStringA(wxString::Format("BEHOLD! TILE %d,%d,%d CONTAINS %zu SACRIFIC-- I MEAN ITEMS! STARTING WITH ID %d!\n", 
-                tilePos.x, tilePos.y, tilePos.z, 
-                tileItems[tilePos].size(),
-                tileItems[tilePos].front()).c_str());
-        } else {
-            OutputDebugStringA(wxString::Format("THE TILE AT %d,%d,%d IS BARREN! THE HORROR! THE HORROR!\n",
-                tilePos.x, tilePos.y, tilePos.z).c_str());
+        // Single item selection
+        else if(selectedItemCount == 1) {
+            for(Item* item : tile->items) {
+                if(item && item->isSelected()) {
+                    tileItems[tilePos].push_back(item);
+                    totalItems++;
+                    OutputDebugStringA(wxString::Format("Adding single selected item %d\n", 
+                        item->getID()));
+                    break;
+                }
+            }
         }
         
         tileCount++;
-        minPos.x = std::min(minPos.x, tilePos.x);
-        minPos.y = std::min(minPos.y, tilePos.y);
-        minPos.z = std::min(minPos.z, tilePos.z);
-        maxPos.x = std::max(maxPos.x, tilePos.x);
-        maxPos.y = std::max(maxPos.y, tilePos.y);
-        maxPos.z = std::max(maxPos.z, tilePos.z);
+        
+        // Update min/max positions
+        if(tilePos.x < minPos.x) minPos.x = tilePos.x;
+        if(tilePos.y < minPos.y) minPos.y = tilePos.y;
+        if(tilePos.z < minPos.z) minPos.z = tilePos.z;
+        if(tilePos.x > maxPos.x) maxPos.x = tilePos.x;
+        if(tilePos.y > maxPos.y) maxPos.y = tilePos.y;
+        if(tilePos.z > maxPos.z) maxPos.z = tilePos.z;
     }
 
     OutputDebugStringA(wxString::Format("MWAHAHAHA! ACQUIRED %d ITEMS FROM %d TILES! THE COLLECTION GROWS!\n", 
@@ -3315,7 +3287,7 @@ void MapCanvas::OnSelectionToDoodad(wxCommandEvent& WXUNUSED(event)) {
     wxXmlNode* newBrushNode = new wxXmlNode(wxXML_ELEMENT_NODE, "brush");
     newBrushNode->AddAttribute("name", newBrushName);
     newBrushNode->AddAttribute("type", "doodad");
-    newBrushNode->AddAttribute("server_lookid", wxString::Format("%d", tileItems.begin()->second.front()));
+    newBrushNode->AddAttribute("server_lookid", wxString::Format("%d", tileItems.begin()->second.front()->getID()));
     newBrushNode->AddAttribute("draggable", "true");
     newBrushNode->AddAttribute("on_blocking", "true");
     newBrushNode->AddAttribute("thickness", "100/100");
@@ -3336,12 +3308,12 @@ void MapCanvas::OnSelectionToDoodad(wxCommandEvent& WXUNUSED(event)) {
         tileNode->AddAttribute("x", wxString::Format("%d", relX));
         tileNode->AddAttribute("y", wxString::Format("%d", relY));
         
-        // Add all items for this tile position in the correct order
-        for(uint16_t itemId : tilePair.second) {
-            wxXmlNode* itemNode = new wxXmlNode(wxXML_ELEMENT_NODE, "item");
-            itemNode->AddAttribute("id", wxString::Format("%d", itemId));
-            tileNode->AddChild(itemNode);
-        }
+        // To:
+		for(Item* item : tilePair.second) {
+			wxXmlNode* itemNode = new wxXmlNode(wxXML_ELEMENT_NODE, "item");
+			itemNode->AddAttribute("id", wxString::Format("%d", item->getID()));
+			tileNode->AddChild(itemNode);
+		}
         
         compositeNode->AddChild(tileNode);
     }
