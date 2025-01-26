@@ -2824,14 +2824,11 @@ void AnimationTimer::Stop() {
 };
 
 void MapCanvas::OnFill(wxCommandEvent& WXUNUSED(event)) {
-    OutputDebugStringA("OnFill invoked.\n");
+    OutputDebugStringA("INITIATING IMPROVED FILL PROTOCOL! NOW WITH BORDER AWARENESS!\n");
 
-    if (!g_gui.GetCurrentBrush()) {
-        OutputDebugStringA("No current brush selected.\n");
-        return;
-    }
 
-    // Check if we should show the warning
+
+// Check if we should show the warning do not remove this warning functionality
     if (show_fill_warning) {
         wxDialog* dialog = new wxDialog(g_gui.root, wxID_ANY, "Fill Area", 
             wxDefaultPosition, wxDefaultSize, wxDEFAULT_DIALOG_STYLE);
@@ -2869,95 +2866,216 @@ void MapCanvas::OnFill(wxCommandEvent& WXUNUSED(event)) {
         if (checkbox->GetValue()) {
             show_fill_warning = false;
         }
-        
         dialog->Destroy();
     }
+	// DONT TOUCH this warning box pls 
+
+    if (!g_gui.GetCurrentBrush()) {
+        OutputDebugStringA("NO BRUSH SELECTED! THE VOID CANNOT BE FILLED!\n");
+        return;
+    }
+
+    PositionVector tilestodraw;
+    PositionVector tilestoborder;
 
     // Get cursor position
     int map_x, map_y;
     ScreenToMap(cursor_x, cursor_y, &map_x, &map_y);
     Position start(map_x, map_y, floor);
     
-    OutputDebugStringA("Validating fill area...\n");
+    Tile* start_tile = editor.map.getTile(start);
+    bool is_border_fill = false;
 
-    // Rest of your existing fill code...
-    std::queue<Position> to_check;
-    std::set<Position> checked;
-    to_check.push(start);
-    bool escape_found = false;
-
-    while (!to_check.empty() && !escape_found) {
-        Position pos = to_check.front();
-        to_check.pop();
-
-        if (checked.count(pos) > 0) continue;
-        checked.insert(pos);
-
-        // Check if we're at map edge
-        if (pos.x == 0 || pos.y == 0 || 
-            pos.x >= editor.map.getWidth() || 
-            pos.y >= editor.map.getHeight()) {
-            escape_found = true;
-            break;
-        }
-
-        // Get current tile
-        Tile* tile = editor.map.getTile(pos);
-        bool is_empty = (!tile || 
-                        (!tile->spawn || !g_settings.getInteger(Config::SHOW_SPAWNS)) && 
-                        (!tile->creature || !g_settings.getInteger(Config::SHOW_CREATURES)) && 
-                        !tile->getTopItem());
-
-        // Skip if tile is not empty (boundary)
-        if (!is_empty) continue;
-
-        // Check adjacent tiles (only on same floor)
-        Position adjacent[4] = {
-            Position(pos.x + 1, pos.y, floor),
-            Position(pos.x - 1, pos.y, floor),
-            Position(pos.x, pos.y + 1, floor),
-            Position(pos.x, pos.y - 1, floor)
-        };
-
-        for (const Position& next : adjacent) {
-            if (checked.count(next) > 0) continue;
-            
-            Tile* next_tile = editor.map.getTile(next);
-            bool next_is_empty = (!next_tile || 
-                                (!next_tile->spawn || !g_settings.getInteger(Config::SHOW_SPAWNS)) && 
-                                (!next_tile->creature || !g_settings.getInteger(Config::SHOW_CREATURES)) && 
-                                !next_tile->getTopItem());
-            
-            if (next_is_empty) {
-                to_check.push(next);
+    // Check if we have a border item on the starting tile
+    if(start_tile) {
+        for(Item* item : start_tile->items) {
+            if(item && item->isBorder()) {
+                is_border_fill = true;
+                break;
             }
         }
     }
 
-    if (escape_found) {
-        OutputDebugStringA("Area not enclosed!\n");
-        g_gui.PopupDialog("Error", "Cannot fill - area is not enclosed.", wxOK);
-        return;
-    }
+    if(is_border_fill) {
+        OutputDebugStringA("BORDER DETECTED! INITIATING SNAKE-LIKE BORDER FILL!\n");
+        
+        const int MAX_BORDERS_PER_BATCH = BLOCK_SIZE * 4; // Safety limit per batch
+        std::queue<Position> border_queue;
+        std::set<Position> processed_borders;
+        std::set<Position> to_fill;
+        std::set<Position> remaining_borders; // Store borders for next batch
 
-    // If we get here, the area is enclosed. Now we can safely fill it.
-    OutputDebugStringA(wxString::Format("Area is enclosed. Fill size: %d tiles\n", checked.size()).c_str());
+        border_queue.push(start);
+        bool continue_filling = true;
 
-    // Perform the fill operation
-    Action* action = editor.actionQueue->createAction(ACTION_DRAW);
-    for (const Position& pos : checked) {
-        Tile* tile = editor.map.getTile(pos);
-        if (!tile) {
-            tile = editor.map.createTile(pos.x, pos.y, pos.z);
+        while(continue_filling) {
+            int current_batch_count = 0;
+            
+            while(!border_queue.empty() && current_batch_count < MAX_BORDERS_PER_BATCH) {
+                Position current = border_queue.front();
+                border_queue.pop();
+
+                if(processed_borders.count(current) > 0) continue;
+                processed_borders.insert(current);
+                to_fill.insert(current);
+                current_batch_count++;
+
+                // Check adjacent tiles for more borders (8 directions)
+                Position adjacent[8] = {
+                    Position(current.x + 1, current.y, floor),     // Right
+                    Position(current.x - 1, current.y, floor),     // Left
+                    Position(current.x, current.y + 1, floor),     // Down
+                    Position(current.x, current.y - 1, floor),     // Up
+                    Position(current.x + 1, current.y + 1, floor), // Bottom-right
+                    Position(current.x - 1, current.y - 1, floor), // Top-left
+                    Position(current.x - 1, current.y + 1, floor), // Bottom-left
+                    Position(current.x + 1, current.y - 1, floor)  // Top-right
+                };
+
+                for(const Position& pos : adjacent) {
+                    if(processed_borders.count(pos) > 0) continue;
+                    
+                    Tile* tile = editor.map.getTile(pos);
+                    if(!tile) continue;
+
+                    for(Item* item : tile->items) {
+                        if(item && item->isBorder()) {
+                            if(current_batch_count >= MAX_BORDERS_PER_BATCH) {
+                                remaining_borders.insert(pos);
+                            } else {
+                                border_queue.push(pos);
+                            }
+                            break;
+                        }
+                    }
+                }
+            }
+
+            // Process current batch
+            if(!to_fill.empty()) {
+                OutputDebugStringA(wxString::Format("PROCESSING BATCH OF %d BORDERS...\n", to_fill.size()).c_str());
+                
+                Action* action = editor.actionQueue->createAction(ACTION_DRAW);
+                for(const Position& pos : to_fill) {
+                    Tile* tile = editor.map.getTile(pos);
+                    if(!tile) {
+                        tile = editor.map.createTile(pos.x, pos.y, pos.z);
+                    }
+                    Tile* new_tile = tile->deepCopy(editor.map);
+                    g_gui.GetCurrentBrush()->draw(&editor.map, new_tile, nullptr);
+                    action->addChange(newd Change(new_tile));
+                }
+                editor.addAction(action);
+                g_gui.RefreshView();
+            }
+
+            // Check if we should continue with remaining borders
+            if(!remaining_borders.empty()) {
+                wxString message = wxString::Format(
+                    "Processed %d borders. There are %d more borders to process.\nContinue filling?",
+                    processed_borders.size(), remaining_borders.size());
+                
+                int answer = g_gui.PopupDialog(
+                    "Continue Border Fill?", 
+                    message,
+                    wxYES_NO
+                );
+
+                if(answer == wxID_YES) {
+                    OutputDebugStringA("CONTINUING WITH NEXT BATCH OF BORDERS...\n");
+                    // Move remaining borders to queue for next batch
+                    for(const Position& pos : remaining_borders) {
+                        border_queue.push(pos);
+                    }
+                    remaining_borders.clear();
+                    to_fill.clear();
+                } else {
+                    OutputDebugStringA("BORDER FILL STOPPED BY USER!\n");
+                    continue_filling = false;
+                }
+            } else {
+                OutputDebugStringA("ALL BORDERS PROCESSED! THE SNAKE IS SATISFIED!\n");
+                continue_filling = false;
+            }
         }
-        Tile* new_tile = tile->deepCopy(editor.map);
-        g_gui.GetCurrentBrush()->draw(&editor.map, new_tile, nullptr);
-        action->addChange(newd Change(new_tile));
-    }
-    editor.addAction(action);
-    g_gui.RefreshView();
+    } else {
+        // Normal fill with area validation
+        OutputDebugStringA("NORMAL FILL INITIATED! VALIDATING AREA...\n");
+        
+        std::queue<Position> to_check;
+        std::set<Position> checked;
+        to_check.push(start);
+        bool escape_found = false;
 
-    OutputDebugStringA("Fill operation completed successfully.\n");
+        while (!to_check.empty() && !escape_found) {
+            Position pos = to_check.front();
+            to_check.pop();
+
+            if (checked.count(pos) > 0) continue;
+            checked.insert(pos);
+
+            // Check map boundaries
+            if (pos.x <= 0 || pos.y <= 0 || 
+                pos.x >= editor.map.getWidth() - 1 || 
+                pos.y >= editor.map.getHeight() - 1) {
+                escape_found = true;
+                break;
+            }
+
+            Tile* tile = editor.map.getTile(pos);
+            bool is_empty = (!tile || 
+                           (!tile->spawn || !g_settings.getInteger(Config::SHOW_SPAWNS)) && 
+                           (!tile->creature || !g_settings.getInteger(Config::SHOW_CREATURES)) && 
+                           !tile->getTopItem());
+
+            if (!is_empty) continue;
+
+            // Check adjacent tiles (4-directional)
+            Position adjacent[4] = {
+                Position(pos.x + 1, pos.y, floor),
+                Position(pos.x - 1, pos.y, floor),
+                Position(pos.x, pos.y + 1, floor),
+                Position(pos.x, pos.y - 1, floor)
+            };
+
+            for (const Position& next : adjacent) {
+                if (checked.count(next) > 0) continue;
+                
+                Tile* next_tile = editor.map.getTile(next);
+                bool next_is_empty = (!next_tile || 
+                                    (!next_tile->spawn || !g_settings.getInteger(Config::SHOW_SPAWNS)) && 
+                                    (!next_tile->creature || !g_settings.getInteger(Config::SHOW_CREATURES)) && 
+                                    !next_tile->getTopItem());
+                
+                if (next_is_empty) {
+                    to_check.push(next);
+                }
+            }
+        }
+
+        if (escape_found) {
+            OutputDebugStringA("AREA NOT ENCLOSED! THE VOID LEAKS!\n");
+            g_gui.PopupDialog("Error", "Cannot fill - area is not enclosed.", wxOK);
+            return;
+        }
+
+        OutputDebugStringA(wxString::Format("FOUND %d TILES TO FILL NORMALLY!\n", checked.size()).c_str());
+        
+        Action* action = editor.actionQueue->createAction(ACTION_DRAW);
+        for (const Position& pos : checked) {
+            Tile* tile = editor.map.getTile(pos);
+            if (!tile) {
+                tile = editor.map.createTile(pos.x, pos.y, pos.z);
+            }
+            Tile* new_tile = tile->deepCopy(editor.map);
+            g_gui.GetCurrentBrush()->draw(&editor.map, new_tile, nullptr);
+            action->addChange(newd Change(new_tile));
+        }
+        
+        editor.addAction(action);
+        g_gui.RefreshView();
+        OutputDebugStringA("NORMAL FILL COMPLETE! THE VOID HAS BEEN FILLED!\n");
+    }
 }
 
 void MapCanvas::OnSelectionToDoodad(wxCommandEvent& WXUNUSED(event)) {
