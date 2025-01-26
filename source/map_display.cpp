@@ -3168,17 +3168,34 @@ void MapCanvas::OnSelectionToDoodad(wxCommandEvent& WXUNUSED(event)) {
     // Get the proper data directory paths
     wxString versionString = g_gui.GetCurrentVersion().getName();
     std::string versionStr = std::string(versionString.mb_str());
+    
+    // Convert version number to data directory format
+    // Remove dots first
     versionStr.erase(std::remove(versionStr.begin(), versionStr.end(), '.'), versionStr.end());
+    
+    // Handle special cases for 2-digit versions (add 0)
+    if(versionStr.length() == 2) {
+        versionStr += "0";
+    }
+    // Handle special case for 10.10 -> 10100
+    else if(versionStr == "1010") {
+        versionStr = "10100";
+    }
+    
+    OutputDebugStringA(wxString::Format("CONVERTED VERSION %s TO DIRECTORY %s\n", 
+        versionString, versionStr).c_str());
     
     FileName doodadsPath = g_gui.GetDataDirectory();
     doodadsPath.SetPath(doodadsPath.GetPath() + "/" + versionStr);
     doodadsPath.SetName("doodads.xml");
     
+    wxString doodadsPathStr = doodadsPath.GetFullPath();
+    OutputDebugStringA(wxString::Format("ATTEMPTING TO ACCESS DOODADS AT: %s\n", doodadsPathStr).c_str());
+    
     FileName collectionsPath = g_gui.GetDataDirectory();
     collectionsPath.SetPath(collectionsPath.GetPath() + "/" + versionStr);
     collectionsPath.SetName("collections.xml");
     
-    wxString doodadsPathStr = doodadsPath.GetFullPath();
     wxString collectionsPathStr = collectionsPath.GetFullPath();
 
     // First handle doodads.xml - this gets the full brush pattern
