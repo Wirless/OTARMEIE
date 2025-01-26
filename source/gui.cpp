@@ -516,12 +516,12 @@ bool GUI::LoadDataFiles(wxString& error, wxArrayString& warnings) {
 	if (!g_materials.loadMaterials(wxString(data_path.GetPath(wxPATH_GET_VOLUME | wxPATH_GET_SEPARATOR) + "materials.xml"), error, warnings)) {
 		warnings.push_back("Couldn't load materials.xml: " + error);
 	}
-
+	
 	g_gui.SetLoadDone(60, "Loading collections.xml ...");
 	if (!g_materials.loadMaterials(wxString(data_path.GetPath(wxPATH_GET_VOLUME | wxPATH_GET_SEPARATOR) + "collections.xml"), error, warnings)) {
 		warnings.push_back("Couldn't load collections.xml: " + error);
 	}
-
+	
 	g_gui.SetLoadDone(70, "Loading extensions...");
 	if (!g_materials.loadExtensions(extension_path, error, warnings)) {
 		// warnings.push_back("Couldn't load extensions: " + error);
