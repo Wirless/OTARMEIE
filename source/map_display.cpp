@@ -3198,12 +3198,99 @@ void MapCanvas::OnSelectionToDoodad(wxCommandEvent& WXUNUSED(event)) {
     
     wxString collectionsPathStr = collectionsPath.GetFullPath();
 
-    // First handle doodads.xml - this gets the full brush pattern
+    // After loading paths but before creating the brush...
+    // Load collections.xml to get existing tilesets
+    std::vector<wxString> tilesetNames;
+    wxXmlDocument collectionsDoc;
+    if (collectionsDoc.Load(collectionsPathStr)) {
+        wxXmlNode* root = collectionsDoc.GetRoot();
+        if (root) {
+            for (wxXmlNode* node = root->GetChildren(); node; node = node->GetNext()) {
+                if (node->GetName() == "tileset") {
+                    tilesetNames.push_back(node->GetAttribute("name"));
+                }
+            }
+        }
+    } else {
+        OutputDebugStringA("THE COLLECTIONS TOME IS MISSING! CREATING A NEW ONE!\n");
+        wxXmlNode* root = new wxXmlNode(wxXML_ELEMENT_NODE, "materials");
+        collectionsDoc.SetRoot(root);
+    }
+
+    if (tilesetNames.empty()) {
+        g_gui.PopupDialog(this, "Error", "No tilesets found in collections.xml!", wxOK);
+        return;
+    }
+
+    // Create tileset selection dialog
+    wxDialog* dialog = new wxDialog(g_gui.root, wxID_ANY, "Select Collection", 
+        wxDefaultPosition, wxDefaultSize, wxDEFAULT_DIALOG_STYLE);
+
+    wxBoxSizer* dialogSizer = new wxBoxSizer(wxVERTICAL);
+
+    // Add dropdown for existing collections
+    wxBoxSizer* choiceSizer = new wxBoxSizer(wxHORIZONTAL);
+    wxStaticText* choiceLabel = new wxStaticText(dialog, wxID_ANY, "Collection:");
+    wxChoice* collectionChoice = new wxChoice(dialog, wxID_ANY);
+    
+    for (const wxString& name : tilesetNames) {
+        collectionChoice->Append(name);
+    }
+    collectionChoice->SetSelection(0);
+    
+    choiceSizer->Add(choiceLabel, 0, wxALL | wxALIGN_CENTER_VERTICAL, 5);
+    choiceSizer->Add(collectionChoice, 1, wxALL | wxEXPAND, 5);
+    dialogSizer->Add(choiceSizer, 0, wxEXPAND);
+
+    // Add buttons
+    wxBoxSizer* buttonSizer = new wxBoxSizer(wxHORIZONTAL);
+    wxButton* okButton = new wxButton(dialog, wxID_OK, "OK");
+    wxButton* cancelButton = new wxButton(dialog, wxID_CANCEL, "Cancel");
+    buttonSizer->Add(okButton, 0, wxALL, 5);
+    buttonSizer->Add(cancelButton, 0, wxALL, 5);
+    dialogSizer->Add(buttonSizer, 0, wxALIGN_CENTER | wxALL, 5);
+
+    dialog->SetSizer(dialogSizer);
+    dialogSizer->Fit(dialog);
+
+    if (dialog->ShowModal() != wxID_OK) {
+        dialog->Destroy();
+        return;
+    }
+
+    wxString selectedTileset = collectionChoice->GetString(collectionChoice->GetSelection());
+    dialog->Destroy();
+
+    // Create doodad brush
     wxXmlDocument doodadsDoc;
     if(!doodadsDoc.Load(doodadsPathStr)) {
         OutputDebugStringA("THE DOODADS TOME DOES NOT EXIST! CREATING A NEW ONE!\n");
         wxXmlNode* root = new wxXmlNode(wxXML_ELEMENT_NODE, "materials");
         doodadsDoc.SetRoot(root);
+    }
+
+    // Continue with existing doodad creation code...
+    wxXmlNode* collectionsRoot = collectionsDoc.GetRoot();
+    wxXmlNode* firstTileset = nullptr;
+
+    for(wxXmlNode* node = collectionsRoot->GetChildren(); node; node = node->GetNext()) {
+        if(node->GetName() == "tileset" && node->GetAttribute("name") == selectedTileset) {
+            firstTileset = node;
+            break;
+        }
+    }
+
+    if(!firstTileset) {
+        g_gui.PopupDialog(this, "Error", "Selected tileset not found!", wxOK);
+        return;
+    }
+
+    // Find or create collections node
+    wxXmlNode* collections = firstTileset->GetChildren();
+    if(!collections || collections->GetName() != "collections") {
+        OutputDebugStringA("NO COLLECTIONS NODE FOUND! CREATING ONE FROM THE VOID!\n");
+        collections = new wxXmlNode(wxXML_ELEMENT_NODE, "collections");
+        firstTileset->AddChild(collections);
     }
 
     // Find highest custom number
@@ -3272,61 +3359,41 @@ void MapCanvas::OnSelectionToDoodad(wxCommandEvent& WXUNUSED(event)) {
         return;
     }
 
-    // Now add to collections.xml under first available tileset
-    wxXmlDocument collectionsDoc;
-    if(!collectionsDoc.Load(collectionsPathStr)) {
-        OutputDebugStringA("THE COLLECTIONS TOME IS MISSING! CREATING A NEW ONE!\n");
-        wxXmlNode* root = new wxXmlNode(wxXML_ELEMENT_NODE, "materials");
-        collectionsDoc.SetRoot(root);
-    }
+  
 
-    // Find first available tileset or create new one with index
-    wxXmlNode* collectionsRoot = collectionsDoc.GetRoot();
-    wxXmlNode* firstTileset = nullptr;
-    int highestTilesetIndex = 0;
-    
+    // Find the selected tileset
     for(wxXmlNode* node = collectionsRoot->GetChildren(); node; node = node->GetNext()) {
-        if(node->GetName() == "tileset") {
+        if(node->GetName() == "tileset" && node->GetAttribute("name") == selectedTileset) {
             firstTileset = node;
-            wxString name = node->GetAttribute("name");
-            if(name.StartsWith("Tileset")) {
-                long index;
-                if(name.Mid(7).ToLong(&index)) {
-                    highestTilesetIndex = std::max(highestTilesetIndex, (int)index);
-                }
-            }
+            break;
         }
     }
 
     if(!firstTileset) {
-        OutputDebugStringA("NO TILESETS FOUND! CREATING TILESET FROM THE VOID!\n");
-        firstTileset = new wxXmlNode(wxXML_ELEMENT_NODE, "tileset");
-        wxString newTilesetName = wxString::Format("Tileset%d", highestTilesetIndex + 1);
-        firstTileset->AddAttribute("name", newTilesetName);
-        collectionsRoot->AddChild(firstTileset);
-        OutputDebugStringA(wxString::Format("CREATED NEW TILESET: %s!\n", newTilesetName).c_str());
+        g_gui.PopupDialog(this, "Error", "Selected tileset not found in collections.xml!", wxOK);
+        return;
     }
 
-    // Find or create collections node
-    wxXmlNode* collections = firstTileset->GetChildren();
+    // Find or create collections node in the selected tileset
+   
     if(!collections || collections->GetName() != "collections") {
         OutputDebugStringA("NO COLLECTIONS NODE FOUND! CREATING ONE FROM THE VOID!\n");
         collections = new wxXmlNode(wxXML_ELEMENT_NODE, "collections");
         firstTileset->AddChild(collections);
     }
-	// Add brush reference
+
+    // Add brush reference to the selected tileset
     wxXmlNode* brushRef = new wxXmlNode(wxXML_ELEMENT_NODE, "brush");
     brushRef->AddAttribute("name", newBrushName);
     collections->AddChild(brushRef);
 
-	// Save collections.xml
+    // Save collections.xml
     if(!collectionsDoc.Save(collectionsPathStr)) {
         OutputDebugStringA("THE COLLECTIONS TOME RESISTS OUR CHANGES!\n");
         g_gui.PopupDialog(this, "Error", "Could not write to collections.xml!", wxOK);
         return;
     }
-    OutputDebugStringA(wxString::Format("THE BRUSH HAS BEEN BOUND TO THE %s TILESET!\n", 
-        firstTileset->GetAttribute("name")).c_str());
+    OutputDebugStringA(wxString::Format("THE BRUSH HAS BEEN BOUND TO THE %s TILESET!\n", selectedTileset).c_str());
 
     OutputDebugStringA("THE RITUAL IS COMPLETE! THE DOODAD HAS BEEN BOUND!\n");
     g_gui.PopupDialog(this, "Success", "IT'S ALIVE! IT'S ALIVE! Created: " + newBrushName, wxOK);
