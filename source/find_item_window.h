@@ -74,7 +74,9 @@ public:
 
 	std::vector<std::pair<uint16_t, uint16_t>> ParseRangeString(const wxString& input);
 
-	bool IsRemoveEnabled() const { return remove_found_items->GetValue(); }
+	// Public methods
+
+	std::vector<uint16_t> GetIgnoredIds() const { return ignored_ids; }
 
 protected:
 	void EnableProperties(bool enable);
@@ -141,7 +143,7 @@ protected:
 
 	bool IsInRanges(uint16_t id, const std::vector<std::pair<uint16_t, uint16_t>>& ranges);
 
-	wxCheckBox* remove_found_items;
+
 
 	DECLARE_EVENT_TABLE()
 };

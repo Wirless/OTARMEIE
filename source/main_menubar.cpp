@@ -870,10 +870,17 @@ namespace OnSearchForItem {
 	};
 
 	struct RangeFinder {
-		RangeFinder(const std::vector<std::pair<uint16_t, uint16_t>>& ranges) : 
-			ranges(ranges), maxCount((uint32_t)g_settings.getInteger(Config::REPLACE_SIZE)) { }
+		RangeFinder(const std::vector<std::pair<uint16_t, uint16_t>>& ranges, 
+				   const std::vector<uint16_t>& ignored_ids = {},
+				   const std::vector<std::pair<uint16_t, uint16_t>>& ignored_ranges = {}) : 
+			ranges(ranges), 
+			ignored_ids(ignored_ids),
+			ignored_ranges(ignored_ranges),
+			maxCount((uint32_t)g_settings.getInteger(Config::REPLACE_SIZE)) { }
 			
 		std::vector<std::pair<uint16_t, uint16_t>> ranges;
+		std::vector<uint16_t> ignored_ids;
+		std::vector<std::pair<uint16_t, uint16_t>> ignored_ranges;
 		uint32_t maxCount;
 		std::vector<std::pair<Tile*, Item*>> result;
 		
@@ -888,9 +895,20 @@ namespace OnSearchForItem {
 				g_gui.SetLoadDone((unsigned int)(100 * done / map.getTileCount()));
 			}
 			
-			// Check if item ID is in any of our ranges
+			uint16_t itemId = item->getID();
+			
+			// Check if item should be ignored
+			for(const auto& id : ignored_ids) {
+				if(itemId == id) return;
+			}
+			
+			for(const auto& range : ignored_ranges) {
+				if(itemId >= range.first && itemId <= range.second) return;
+			}
+			
+			// Check if item is in search ranges
 			for(const auto& range : ranges) {
-				if(item->getID() >= range.first && item->getID() <= range.second) {
+				if(itemId >= range.first && itemId <= range.second) {
 					result.push_back(std::make_pair(tile, item));
 					break;
 				}
@@ -900,76 +918,86 @@ namespace OnSearchForItem {
 }
 
 void MainMenuBar::OnSearchForItem(wxCommandEvent& WXUNUSED(event)) {
-	if (!g_gui.IsEditorOpen()) {
-		return;
-	}
+    if (!g_gui.IsEditorOpen()) {
+        return;
+    }
 
-	FindItemDialog dialog(frame, "Search for Item");
-	dialog.setSearchMode((FindItemDialog::SearchMode)g_settings.getInteger(Config::FIND_ITEM_MODE));
-	if (dialog.ShowModal() == wxID_OK) {
-		if (dialog.getUseRange()) {
-			auto ranges = dialog.ParseRangeString(dialog.GetRangeInput());
-			if (!ranges.empty()) {
-				OnSearchForItem::RangeFinder finder(ranges);
-				g_gui.CreateLoadBar("Searching map...");
-				
-				foreach_ItemOnMap(g_gui.GetCurrentMap(), finder, false);
-				std::vector<std::pair<Tile*, Item*>>& result = finder.result;
-				
-				g_gui.DestroyLoadBar();
-				
-				if (finder.limitReached()) {
-					wxString msg;
-					msg << "The configured limit has been reached. Only " << finder.maxCount << " results will be displayed.";
-					g_gui.PopupDialog("Notice", msg, wxOK);
-				}
-				
-				SearchResultWindow* resultWindow = g_gui.ShowSearchWindow();
-				resultWindow->Clear();
-				for (const auto& pair : result) {
-					resultWindow->AddPosition(wxString::Format("Item %d", pair.second->getID()), pair.first->getPosition());
-				}
-			}
-		} else {
-			OnSearchForItem::Finder finder(dialog.getResultID(), (uint32_t)g_settings.getInteger(Config::REPLACE_SIZE));
-			g_gui.CreateLoadBar("Searching map...");
+    FindItemDialog dialog(frame, "Search for Item");
+    dialog.setSearchMode((FindItemDialog::SearchMode)g_settings.getInteger(Config::FIND_ITEM_MODE));
+    if (dialog.ShowModal() == wxID_OK) {
+        if (dialog.getUseRange()) {
+            auto ranges = dialog.ParseRangeString(dialog.GetRangeInput());
+            if (!ranges.empty()) {
+                // Parse ignored IDs if enabled
+                std::vector<uint16_t> ignored_ids;
+                std::vector<std::pair<uint16_t, uint16_t>> ignored_ranges;
+                if(dialog.IsIgnoreIdsEnabled()) {
+                    ignored_ids = dialog.GetIgnoredIds();
+                    ignored_ranges = dialog.ParseRangeString(dialog.GetIgnoreIdsText());
+                }
+                
+                OnSearchForItem::RangeFinder finder(ranges, ignored_ids, ignored_ranges);
+                g_gui.CreateLoadBar("Searching map...");
+                
+                foreach_ItemOnMap(g_gui.GetCurrentMap(), finder, false);
+                std::vector<std::pair<Tile*, Item*>>& result = finder.result;
+                
+           
+                
+                g_gui.DestroyLoadBar();
+                
+                if (finder.limitReached()) {
+                    wxString msg;
+                    msg << "The configured limit has been reached. Only " << finder.maxCount << " results will be displayed.";
+                    g_gui.PopupDialog("Notice", msg, wxOK);
+                }
+                
+                SearchResultWindow* resultWindow = g_gui.ShowSearchWindow();
+                resultWindow->Clear();
+                for (const auto& pair : result) {
+                    resultWindow->AddPosition(wxString::Format("Item %d", pair.second->getID()), pair.first->getPosition());
+                }
+            }
+        } else {
+            OnSearchForItem::Finder finder(dialog.getResultID(), (uint32_t)g_settings.getInteger(Config::REPLACE_SIZE));
+            g_gui.CreateLoadBar("Searching map...");
 
-			foreach_ItemOnMap(g_gui.GetCurrentMap(), finder, false);
-			std::vector<std::pair<Tile*, Item*>>& result = finder.result;
+            foreach_ItemOnMap(g_gui.GetCurrentMap(), finder, false);
+            std::vector<std::pair<Tile*, Item*>>& result = finder.result;
 
-			g_gui.DestroyLoadBar();
+            g_gui.DestroyLoadBar();
 
-			if (finder.limitReached()) {
-				wxString msg;
-				msg << "The configured limit has been reached. Only " << finder.maxCount << " results will be displayed.";
-				g_gui.PopupDialog("Notice", msg, wxOK);
-			}
+            if (finder.limitReached()) {
+                wxString msg;
+                msg << "The configured limit has been reached. Only " << finder.maxCount << " results will be displayed.";
+                g_gui.PopupDialog("Notice", msg, wxOK);
+            }
 
-			SearchResultWindow* window = g_gui.ShowSearchWindow();
-			window->Clear();
+            SearchResultWindow* window = g_gui.ShowSearchWindow();
+            window->Clear();
 
-			// Pass the ignored IDs configuration from the dialog
-			window->SetIgnoredIds(dialog.GetIgnoreIdsText(), dialog.IsIgnoreIdsEnabled());
+            // Pass the ignored IDs configuration from the dialog
+            window->SetIgnoredIds(dialog.GetIgnoreIdsText(), dialog.IsIgnoreIdsEnabled());
 
-			for (std::vector<std::pair<Tile*, Item*>>::const_iterator iter = result.begin(); iter != result.end(); ++iter) {
-				Tile* tile = iter->first;
-				Item* item = iter->second;
-				
-				// Format description to include both name and ID
-				wxString description = wxString::Format("%s (ID: %d)", 
-					wxstr(item->getName()),
-					item->getID());
-				
-				OutputDebugStringA(wxString::Format("Adding search result: %s at pos(%d,%d,%d)\n", 
-					description, tile->getPosition().x, tile->getPosition().y, tile->getPosition().z).c_str());
-				
-				window->AddPosition(description, tile->getPosition());
-			}
-		}
+            for (std::vector<std::pair<Tile*, Item*>>::const_iterator iter = result.begin(); iter != result.end(); ++iter) {
+                Tile* tile = iter->first;
+                Item* item = iter->second;
+                
+                // Format description to include both name and ID
+                wxString description = wxString::Format("%s (ID: %d)", 
+                    wxstr(item->getName()),
+                    item->getID());
+                
+                OutputDebugStringA(wxString::Format("Adding search result: %s at pos(%d,%d,%d)\n", 
+                    description, tile->getPosition().x, tile->getPosition().y, tile->getPosition().z).c_str());
+                
+                window->AddPosition(description, tile->getPosition());
+            }
+        }
 
-		g_settings.setInteger(Config::FIND_ITEM_MODE, (int)dialog.getSearchMode());
-	}
-	dialog.Destroy();
+        g_settings.setInteger(Config::FIND_ITEM_MODE, (int)dialog.getSearchMode());
+    }
+    dialog.Destroy();
 }
 
 void MainMenuBar::OnReplaceItems(wxCommandEvent& WXUNUSED(event)) {

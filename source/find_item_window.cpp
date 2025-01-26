@@ -32,35 +32,38 @@
 
 /*
  * ! CURRENT TASK:
- * Add Remove Items Checkbox to Find Items Dialog
+ * Fix Search Results and Item Removal Integration
  * --------------------------------------------
- * Add functionality to remove found items after finding them
+ * Current Issues:
+ * - Search results after execution still show ignored IDs
+ * - Remove items functionality when no selection is made queries the whole map by itself instead of using the search result on execute
  * 
- * Current Operation:
- * - Dialog finds items based on search criteria and displays results that allow to go to the item in the map
- * - Items are highlighted/selected when found
+ * Required Changes:
+ * 1. Fix Search Results Display:
+ *    - Modify RefreshContentsInternal() to properly filter ignored IDs
+ *    - Add ignored ID checking before adding items to items_list
+ *    - Update debug output to track ignored item filtering
  * 
- * Desired Changes:
- * - Add checkbox under IgnoredIds section
- * - Label: "Remove found items"
- * - When checked, found items will be removed from their positions and the dialog will be refreshed
- * - Should work with both single and range searches
+ * 2. Improve Item Removal:
+ *    - Check for active selection before allowing removal otherwise try to use the search results from execute
+ *    - Store search results so run find items first and then from the result after executing try to remove the items that are already found no point seacrhing twice
  * 
- * Technical Requirements:
- * - Add checkbox member to FindItemDialog class
- * - Modify search logic to handle item removal
- * - Ensure proper undo/redo support for removals
- * - Update item counts and display after removal
+ * Technical Implementation:
+ * - Add member variable to store search results
+ * - Modify OnClickOK to create selection of positions from the execute results 
+ * - Update ignored ID filtering in all search modes
+ * - Add selection creation helper methods
  * 
- * Visual Layout:
- * [Existing IgnoredIds section]
- * [x] Remove found items
- * [Rest of dialog...]
+ * Affected Files:
+ * - find_item_window.cpp
+ * - find_item_window.h
+ * - selection.cpp
  * 
- * Implementation Notes:
- * - Need to handle removal within the map's action system
- * - Should update statistics after removal
- * - Consider adding confirmation dialog for large numbers of items
+ * Testing Requirements:
+ * - Verify ignored IDs are filtered from display
+ * - Test removal with and without selection
+ * - Verify proper selection creation
+ * - Test with different search modes
  */
 
 
@@ -146,12 +149,7 @@ FindItemDialog::FindItemDialog(wxWindow* parent, const wxString& title, bool onl
 	
 	options_box_sizer->Add(ignored_ids_box_sizer, 0, wxALL | wxEXPAND, 5);
 
-	// Add after ignored IDs section
-	wxStaticBoxSizer* remove_box = newd wxStaticBoxSizer(new wxStaticBox(this, wxID_ANY, "Item Removal"), wxVERTICAL);
-	remove_found_items = newd wxCheckBox(remove_box->GetStaticBox(), wxID_ANY, "Remove found items");
-	remove_found_items->SetToolTip("When checked, found items will be removed from their positions");
-	remove_box->Add(remove_found_items, 0, wxALL, 5);
-	options_box_sizer->Add(remove_box, 0, wxALL | wxEXPAND, 5);
+	
 
 	// Add spacer
 	options_box_sizer->Add(0, 0, 1, wxEXPAND, 5);
@@ -415,28 +413,68 @@ void FindItemDialog::RefreshContentsInternal() {
 		if(use_range->GetValue()) {
 			// Parse the range string into pairs
 			auto ranges = ParseRangeString(range_input->GetValue());
+			OutputDebugStringA(wxString::Format("RANGE SEARCH: Found %zu ranges to search\n", ranges.size()).c_str());
 			
-			for(uint16_t id = 100; id <= g_items.getMaxID(); ++id) {
-				if(items_list->GetItemCount() >= size_t(replace_size_spin->GetValue())) {
-					break;
+			// Iterate through each range instead of all IDs
+			for(const auto& range : ranges) {
+				for(uint16_t id = range.first; id <= range.second; ++id) {
+					if(items_list->GetItemCount() >= size_t(replace_size_spin->GetValue())) {
+						OutputDebugStringA("REACHED MAX RESULTS LIMIT!\n");
+						break;
+					}
+					
+					OutputDebugStringA(wxString::Format("Checking ID %d in range %d-%d\n", 
+						id, range.first, range.second).c_str());
+
+					// Check if ID is ignored
+					bool is_ignored = false;
+					if (ignore_ids_checkbox->GetValue()) {
+						// Check individual ignored IDs
+						if (std::find(ignored_ids.begin(), ignored_ids.end(), id) != ignored_ids.end()) {
+							OutputDebugStringA(wxString::Format("ID %d is in ignored individual IDs list\n", id).c_str());
+							is_ignored = true;
+						}
+						// Check ignored ranges
+						for (const auto& ignored_range : ignored_ranges) {
+							if (id >= ignored_range.first && id <= ignored_range.second) {
+								OutputDebugStringA(wxString::Format("ID %d is in ignored range %d-%d\n", 
+									id, ignored_range.first, ignored_range.second).c_str());
+								is_ignored = true;
+								break;
+							}
+						}
+					}
+					
+					if (is_ignored) {
+						OutputDebugStringA(wxString::Format("Skipping ignored ID %d\n", id).c_str());
+						continue;
+					}
+					
+					ItemType& item = g_items.getItemType(id);
+					if(item.id == 0) {
+						OutputDebugStringA(wxString::Format("ID %d has no item type\n", id).c_str());
+						continue;
+					}
+					
+					RAWBrush* raw_brush = item.raw_brush;
+					if(!raw_brush) {
+						OutputDebugStringA(wxString::Format("ID %d has no raw brush\n", id).c_str());
+						continue;
+					}
+					
+					if(only_pickupables && !item.pickupable) {
+						OutputDebugStringA(wxString::Format("ID %d is not pickupable\n", id).c_str());
+						continue;
+					}
+					
+					OutputDebugStringA(wxString::Format("Adding ID %d to results\n", id).c_str());
+					found_search_results = true;
+					items_list->AddBrush(raw_brush);
 				}
-				
-				// Check if ID is in any of the specified ranges
-				if(!IsInRanges(id, ranges)) {
-					continue;
-				}
-				
-				ItemType& item = g_items[id];
-				if(item.id == 0) continue;
-				
-				RAWBrush* raw_brush = item.raw_brush;
-				if(!raw_brush) continue;
-				
-				if(only_pickupables && !item.pickupable) continue;
-				
-				found_search_results = true;
-				items_list->AddBrush(raw_brush);
 			}
+			
+			OutputDebugStringA(wxString::Format("RANGE SEARCH COMPLETE: Found %d items\n", 
+				items_list->GetItemCount()).c_str());
 		} else {
 			result_id = std::min(server_id_spin->GetValue(), 0xFFFF);
 			uint16_t serverID = static_cast<uint16_t>(result_id);
@@ -475,84 +513,84 @@ void FindItemDialog::RefreshContentsInternal() {
 				found_search_results = true;
 			}
 		}
-	 } else if (selection == SearchMode::ClientIDs) {
-        if (use_range->GetValue()) {
-            // Parse the range string into pairs
-            auto ranges = ParseRangeString(range_input->GetValue());
-            
-            for (int id = 100; id <= g_items.getMaxID(); ++id) {
-                if(items_list->GetItemCount() >= size_t(replace_size_spin->GetValue())) {
-                    break;
-                }
+	} else if (selection == SearchMode::ClientIDs) {
+		if (use_range->GetValue()) {
+			// Parse the range string into pairs
+			auto ranges = ParseRangeString(range_input->GetValue());
+			
+			for (int id = 100; id <= g_items.getMaxID(); ++id) {
+				if(items_list->GetItemCount() >= size_t(replace_size_spin->GetValue())) {
+					break;
+				}
 
-                ItemType& item = g_items.getItemType(id);
-                if (item.id == 0) continue;
+				ItemType& item = g_items.getItemType(id);
+				if (item.id == 0) continue;
 
-                // Check if clientID is in any of the specified ranges
-                if (!IsInRanges(item.clientID, ranges)) {
-                    continue;
-                }
+				// Check if clientID is in any of the specified ranges
+				if (!IsInRanges(item.clientID, ranges)) {
+					continue;
+				}
 
-                // Check if clientID is ignored
-                bool is_ignored = false;
-                if (ignore_ids_checkbox->GetValue()) {
-                    if (std::find(ignored_ids.begin(), ignored_ids.end(), item.clientID) != ignored_ids.end()) {
-                        is_ignored = true;
-                    }
-                    for (const auto& range : ignored_ranges) {
-                        if (item.clientID >= range.first && item.clientID <= range.second) {
-                            is_ignored = true;
-                            break;
-                        }
-                    }
-                }
-                if (is_ignored) continue;
+				// Check if clientID is ignored
+				bool is_ignored = false;
+				if (ignore_ids_checkbox->GetValue()) {
+					if (std::find(ignored_ids.begin(), ignored_ids.end(), item.clientID) != ignored_ids.end()) {
+						is_ignored = true;
+					}
+					for (const auto& range : ignored_ranges) {
+						if (item.clientID >= range.first && item.clientID <= range.second) {
+							is_ignored = true;
+							break;
+						}
+					}
+				}
+				if (is_ignored) continue;
 
-                RAWBrush* raw_brush = item.raw_brush;
-                if (!raw_brush) continue;
+				RAWBrush* raw_brush = item.raw_brush;
+				if (!raw_brush) continue;
 
-                if (only_pickupables && !item.pickupable) continue;
+				if (only_pickupables && !item.pickupable) continue;
 
-                found_search_results = true;
-                items_list->AddBrush(raw_brush);
-            }
-        } else {
-            uint16_t clientID = (uint16_t)client_id_spin->GetValue();
-            
-            // Check if clientID is ignored
-            bool is_ignored = false;
-            if (ignore_ids_checkbox->GetValue()) {
-                if (std::find(ignored_ids.begin(), ignored_ids.end(), clientID) != ignored_ids.end()) {
-                    is_ignored = true;
-                }
-                for (const auto& range : ignored_ranges) {
-                    if (clientID >= range.first && clientID <= range.second) {
-                        is_ignored = true;
-                        break;
-                    }
-                }
-            }
-            if (!is_ignored) {
-                for (int id = 100; id <= g_items.getMaxID(); ++id) {
-                    ItemType& item = g_items.getItemType(id);
-                    if (item.id == 0 || item.clientID != clientID) {
-                        continue;
-                    }
+				found_search_results = true;
+				items_list->AddBrush(raw_brush);
+			}
+		} else {
+			uint16_t clientID = (uint16_t)client_id_spin->GetValue();
+			
+			// Check if clientID is ignored
+			bool is_ignored = false;
+			if (ignore_ids_checkbox->GetValue()) {
+				if (std::find(ignored_ids.begin(), ignored_ids.end(), clientID) != ignored_ids.end()) {
+					is_ignored = true;
+				}
+				for (const auto& range : ignored_ranges) {
+					if (clientID >= range.first && clientID <= range.second) {
+						is_ignored = true;
+						break;
+					}
+				}
+			}
+			if (!is_ignored) {
+				for (int id = 100; id <= g_items.getMaxID(); ++id) {
+					ItemType& item = g_items.getItemType(id);
+					if (item.id == 0 || item.clientID != clientID) {
+						continue;
+					}
 
-                    RAWBrush* raw_brush = item.raw_brush;
-                    if (!raw_brush) {
-                        continue;
-                    }
+					RAWBrush* raw_brush = item.raw_brush;
+					if (!raw_brush) {
+						continue;
+					}
 
-                    if (only_pickupables && !item.pickupable) {
-                        continue;
-                    }
+					if (only_pickupables && !item.pickupable) {
+						continue;
+					}
 
-                    found_search_results = true;
-                    items_list->AddBrush(raw_brush);
-                }
-            }
-        }
+					found_search_results = true;
+					items_list->AddBrush(raw_brush);
+				}
+			}
+		}
 	} else if (selection == SearchMode::Names) {
 		std::string search_string = as_lower_str(nstr(name_text_input->GetValue()));
 		if (search_string.size() >= 2) {
@@ -703,84 +741,10 @@ void FindItemDialog::OnInputTimer(wxTimerEvent& WXUNUSED(event)) {
 void FindItemDialog::OnClickOK(wxCommandEvent& event) {
 	if (!g_gui.IsEditorOpen()) return;
 
-	if (invalid_item->GetValue()) {
-		result_brush = nullptr;
-		result_id = 0;
-		EndModal(wxID_OK);
-		return;
-	}
+	Editor* editor = g_gui.GetCurrentEditor();
+	if (!editor) return;
 
-	if (items_list->GetItemCount() != 0) {
-		Brush* brush = items_list->GetSelectedBrush();
-		if (brush) {
-			result_brush = brush;
-			result_id = brush->asRaw()->getItemID();
-
-			// If remove checkbox is checked, handle item removal
-			if (remove_found_items->GetValue()) {
-				Editor* editor = g_gui.GetCurrentEditor();
-				if (editor) {
-					editor->actionQueue->clear();  // Clear previous actions
-					g_gui.CreateLoadBar("Searching items to remove...");
-
-					int64_t count = 0;
-					
-					if (getUseRange()) {
-						// Handle range-based removal
-						auto ranges = ParseRangeString(GetRangeInput());
-						if (!ranges.empty()) {
-							struct RangeRemoveCondition {
-								std::vector<std::pair<uint16_t, uint16_t>> ranges;
-								
-								RangeRemoveCondition(const std::vector<std::pair<uint16_t, uint16_t>>& r) : ranges(r) {}
-								
-								bool operator()(Map& map, Item* item, long long removed, long long done) {
-									if (done % 0x800 == 0) {
-										g_gui.SetLoadDone((unsigned int)(100 * done / map.getTileCount()));
-									}
-									
-									for (const auto& range : ranges) {
-										if (item->getID() >= range.first && item->getID() <= range.second) {
-											return true;
-										}
-									}
-									return false;
-								}
-							} condition(ranges);
-							
-							count = RemoveItemOnMap(editor->map, condition, editor->selection.size() > 0);
-						}
-					} else {
-						// Handle single item removal
-						struct SingleItemRemoveCondition {
-							uint16_t itemId;
-							SingleItemRemoveCondition(uint16_t id) : itemId(id) {}
-							
-							bool operator()(Map& map, Item* item, long long removed, long long done) {
-								if (done % 0x800 == 0) {
-									g_gui.SetLoadDone((unsigned int)(100 * done / map.getTileCount()));
-								}
-								return item->getID() == itemId;
-							}
-						} condition(result_id);
-						
-						count = RemoveItemOnMap(editor->map, condition, editor->selection.size() > 0);
-					}
-					
-					g_gui.DestroyLoadBar();
-
-					wxString msg;
-					msg << count << " items removed.";
-					g_gui.PopupDialog("Remove Items", msg, wxOK);
-					
-					editor->map.doChange();
-					g_gui.RefreshView();
-				}
-			}
-
-			EndModal(wxID_OK);
-		}
-	}
+	EndModal(wxID_OK);
 }
 
 void FindItemDialog::OnClickCancel(wxCommandEvent& WXUNUSED(event)) {
@@ -859,6 +823,8 @@ std::vector<std::pair<uint16_t, uint16_t>> FindItemDialog::ParseRangeString(cons
     std::string str = as_lower_str(nstr(input));
     std::vector<std::string> parts = splitString(str, ',');
     
+    OutputDebugStringA(wxString::Format("Parsing range string: %s\n", str).c_str());
+    
     for(const auto& part : parts) {
         if(part.find('-') != std::string::npos) {
             std::vector<std::string> range = splitString(part, '-');
@@ -867,22 +833,29 @@ std::vector<std::pair<uint16_t, uint16_t>> FindItemDialog::ParseRangeString(cons
                 uint16_t to = static_cast<uint16_t>(std::stoi(range[1]));
                 if(from <= to) {
                     ranges.emplace_back(from, to);
+                    OutputDebugStringA(wxString::Format("Added range: %d-%d\n", from, to).c_str());
                 }
             }
         } else if(isInteger(part)) {
             uint16_t id = static_cast<uint16_t>(std::stoi(part));
             ranges.emplace_back(id, id);
+            OutputDebugStringA(wxString::Format("Added single ID range: %d\n", id).c_str());
         }
     }
+    
+    OutputDebugStringA(wxString::Format("Total ranges parsed: %zu\n", ranges.size()).c_str());
     return ranges;
 }
 
 bool FindItemDialog::IsInRanges(uint16_t id, const std::vector<std::pair<uint16_t, uint16_t>>& ranges) {
     for(const auto& range : ranges) {
         if(id >= range.first && id <= range.second) {
+            OutputDebugStringA(wxString::Format("ID %d is in range %d-%d\n", 
+                id, range.first, range.second).c_str());
             return true;
         }
     }
+    OutputDebugStringA(wxString::Format("ID %d is not in any range\n", id).c_str());
     return false;
 }
 
