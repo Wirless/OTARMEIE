@@ -200,6 +200,7 @@ AboutWindow::AboutWindow(wxWindow* parent) :
 	about << "for details see the LICENSE file.\n";
 	about << "This is free software, and you are welcome to redistribute it\n";
 	about << "under certain conditions.\n";
+	about << " Just make sure that you include the invite link to discord.\n";
 	about << "\n";
 	about << "Compiled on: " << __TDATE__ << " : " << __TTIME__ << "\n";
 	about << "Compiled with: " << BOOST_COMPILER << "\n";
