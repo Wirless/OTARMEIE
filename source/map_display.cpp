@@ -403,13 +403,18 @@ void MapCanvas::UpdatePositionStatus(int x, int y) {
 	ss = "";
 	Tile* tile = editor.map.getTile(map_x, map_y, floor);
 	if (tile) {
+		// Count total items on tile
+		int itemCount = 0;
+		if (tile->ground) itemCount++;
+		itemCount += tile->items.size();
+		
 		if (tile->spawn && g_settings.getInteger(Config::SHOW_SPAWNS)) {
-			ss << "Spawn radius: " << tile->spawn->getSize();
+			ss << "[" << itemCount << "] Spawn radius: " << tile->spawn->getSize();
 		} else if (tile->creature && g_settings.getInteger(Config::SHOW_CREATURES)) {
-			ss << (tile->creature->isNpc() ? "NPC" : "Monster");
+			ss << "[" << itemCount << "] " << (tile->creature->isNpc() ? "NPC" : "Monster");
 			ss << " \"" << wxstr(tile->creature->getName()) << "\" spawntime: " << tile->creature->getSpawnTime();
 		} else if (Item* item = tile->getTopItem()) {
-			ss << "Item \"" << wxstr(item->getName()) << "\"";
+			ss << "[" << itemCount << "] Item \"" << wxstr(item->getName()) << "\"";
 			ss << " id:" << item->getID();
 			ss << " cid:" << item->getClientID();
 			if (item->getUniqueID()) {
@@ -424,10 +429,10 @@ void MapCanvas::UpdatePositionStatus(int x, int y) {
 				ss << " weight: " << s;
 			}
 		} else {
-			ss << "Nothing";
+			ss << "[" << itemCount << "] Nothing";
 		}
 	} else {
-		ss << "Nothing";
+		ss << "[0] Nothing";
 	}
 
 	if (editor.IsLive()) {
