@@ -754,6 +754,18 @@ void FindItemDialog::OnClickOK(wxCommandEvent& event) {
 	Editor* editor = g_gui.GetCurrentEditor();
 	if (!editor) return;
 
+	// If we're in name search mode and have a selection, use that specific item
+	if ((SearchMode)options_radio_box->GetSelection() == SearchMode::Names) {
+		Brush* selected_brush = items_list->GetSelectedBrush();
+		if (selected_brush) {
+			result_brush = selected_brush;  // Store the selected brush
+			if (RAWBrush* raw = dynamic_cast<RAWBrush*>(selected_brush)) {
+				result_id = raw->getItemID();
+				OutputDebugStringA(wxString::Format("Selected item ID: %d\n", result_id).c_str());
+			}
+		}
+	}
+
 	EndModal(wxID_OK);
 }
 
