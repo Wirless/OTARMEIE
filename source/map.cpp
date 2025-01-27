@@ -640,56 +640,100 @@ bool Map::exportMinimap(FileName filename, int floor /*= GROUND_LAYER*/, bool di
 	return true;
 }
 
-uint32_t Map::cleanDuplicateItems(const std::vector<std::pair<uint16_t, uint16_t>>& ranges) {
+uint32_t Map::cleanDuplicateItems(const std::vector<std::pair<uint16_t, uint16_t>>& ranges, const PropertyFlags& flags) {
 	uint32_t duplicates_removed = 0;
 	uint32_t tiles_affected = 0;
-	
-	// Create progress bar tracking
-	uint32_t tiles_done = 0;
-	
-	// Iterate through all tiles using MapIterator (like in cleanInvalidTiles)
-	for(MapIterator mit = begin(); mit != end(); ++mit) {
-		tiles_done++;
-		if(tiles_done % 0x10000 == 0) {
-			g_gui.SetLoadDone(int(tiles_done / double(getTileCount()) * 100.0));
+
+	// Helper function to check if item is in ranges
+	auto isInRanges = [&ranges](uint16_t id) -> bool {
+		if (ranges.empty()) return true; // If no ranges, check all items
+		for (const auto& range : ranges) {
+			if (id >= range.first && id <= range.second) return true;
 		}
-		
+		return false;
+	};
+
+	// Helper function to compare items considering property flags
+	auto compareItems = [&flags](Item* item1, Item* item2) -> bool {
+		if (item1->getID() != item2->getID()) return false;
+
+		const ItemType& type1 = g_items[item1->getID()];
+		const ItemType& type2 = g_items[item2->getID()];
+
+		// If a flag is true (checked), we treat items with that property as different
+		// even if they have the same value for that property
+		if (flags.ignore_unpassable && (type1.unpassable || type2.unpassable)) return false;
+		if (flags.ignore_unmovable && (type1.moveable || type2.moveable)) return false;
+		if (flags.ignore_block_missiles && (type1.blockMissiles || type2.blockMissiles)) return false;
+		if (flags.ignore_block_pathfinder && (type1.blockPathfinder || type2.blockPathfinder)) return false;
+		if (flags.ignore_readable && (type1.canReadText || type2.canReadText)) return false;
+		if (flags.ignore_writeable && (type1.canWriteText || type2.canWriteText)) return false;
+		if (flags.ignore_pickupable && (type1.pickupable || type2.pickupable)) return false;
+		if (flags.ignore_stackable && (type1.stackable || type2.stackable)) return false;
+		if (flags.ignore_rotatable && (type1.rotable || type2.rotable)) return false;
+		if (flags.ignore_hangable && (type1.isHangable || type2.isHangable)) return false;
+		if (flags.ignore_hook_east && (type1.hookEast || type2.hookEast)) return false;
+		if (flags.ignore_hook_south && (type1.hookSouth || type2.hookSouth)) return false;
+		if (flags.ignore_elevation && (type1.hasElevation || type2.hasElevation)) return false;
+
+		return true;
+	};
+
+	for (MapIterator mit = begin(); mit != end(); ++mit) {
 		Tile* tile = (*mit)->get();
-		if(!tile || !tile->size()) {
-			continue;
-		}
-		
+		if (!tile) continue;
+
 		bool tile_modified = false;
-		std::set<uint16_t> seen_ids;
-		
-		// Iterate items in reverse to preserve first instance
-		auto &items = tile->items;
-		for(auto iit = items.rbegin(); iit != items.rend();) {
-			Item* item = *iit;
-			uint16_t id = item->getID();
-			
-			bool in_range = ranges.empty(); // If no ranges, check all items
-			for(const auto& range : ranges) {
-				if(id >= range.first && id <= range.second) {
-					in_range = true;
+		std::set<Item*> kept_items; // Track first instances
+
+		// First pass: identify items to keep
+		for (Item* item : tile->items) {
+			if (!isInRanges(item->getID())) continue;
+
+			bool is_duplicate = false;
+			for (Item* kept : kept_items) {
+				if (compareItems(item, kept)) {
+					is_duplicate = true;
 					break;
 				}
 			}
-			
-			if(in_range && !seen_ids.insert(id).second) { // If already seen this ID
+
+			if (!is_duplicate) {
+				kept_items.insert(item);
+			}
+		}
+
+		// Second pass: remove duplicates
+		auto iit = tile->items.begin();
+		while (iit != tile->items.end()) {
+			Item* item = *iit;
+			if (!isInRanges(item->getID())) {
+				++iit;
+				continue;
+			}
+
+			bool should_remove = true;
+			for (Item* kept : kept_items) {
+				if (item == kept) {
+					should_remove = false;
+					break;
+				}
+			}
+
+			if (should_remove) {
 				delete item;
-				iit = decltype(iit)(items.erase((++iit).base()));
+				iit = tile->items.erase(iit);
 				duplicates_removed++;
 				tile_modified = true;
 			} else {
 				++iit;
 			}
 		}
-		
-		if(tile_modified) {
+
+		if (tile_modified) {
 			tiles_affected++;
 		}
 	}
-	
+
 	return duplicates_removed;
 }

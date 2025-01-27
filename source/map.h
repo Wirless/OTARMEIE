@@ -27,6 +27,54 @@
 #include "waypoints.h"
 #include "templates.h"
 
+// Add this struct before the Map class definition
+struct PropertyFlags {
+	bool ignore_unpassable;
+	bool ignore_unmovable;
+	bool ignore_block_missiles;
+	bool ignore_block_pathfinder;
+	bool ignore_readable;
+	bool ignore_writeable;
+	bool ignore_pickupable;
+	bool ignore_stackable;
+	bool ignore_rotatable;
+	bool ignore_hangable;
+	bool ignore_hook_east;
+	bool ignore_hook_south;
+	bool ignore_elevation;
+
+	// Constructor with default values
+	PropertyFlags(
+		bool unpassable = false,
+		bool unmovable = false,
+		bool block_missiles = false,
+		bool block_pathfinder = false,
+		bool readable = false,
+		bool writeable = false,
+		bool pickupable = false,
+		bool stackable = false,
+		bool rotatable = false,
+		bool hangable = false,
+		bool hook_east = false,
+		bool hook_south = false,
+		bool elevation = false
+	) :
+		ignore_unpassable(unpassable),
+		ignore_unmovable(unmovable),
+		ignore_block_missiles(block_missiles),
+		ignore_block_pathfinder(block_pathfinder),
+		ignore_readable(readable),
+		ignore_writeable(writeable),
+		ignore_pickupable(pickupable),
+		ignore_stackable(stackable),
+		ignore_rotatable(rotatable),
+		ignore_hangable(hangable),
+		ignore_hook_east(hook_east),
+		ignore_hook_south(hook_south),
+		ignore_elevation(elevation)
+	{}
+};
+
 class Map : public BaseMap {
 public:
 	// ctor and dtor
@@ -126,7 +174,10 @@ public:
 
 	// Removes duplicate items from the map, optionally within specified ID ranges
 	// Returns number of items removed
-	uint32_t cleanDuplicateItems(const std::vector<std::pair<uint16_t, uint16_t>>& ranges);
+	uint32_t cleanDuplicateItems(
+		const std::vector<std::pair<uint16_t, uint16_t>>& ranges, 
+		const PropertyFlags& flags
+	);
 
 protected:
 	// Loads a map

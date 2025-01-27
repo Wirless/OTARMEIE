@@ -2319,44 +2319,123 @@ void MainMenuBar::OnMapRemoveDuplicates(wxCommandEvent& WXUNUSED(event)) {
     Editor* editor = g_gui.GetCurrentEditor();
     if (!editor) return;
 
-    wxDialog dialog(frame, wxID_ANY, "Remove Duplicates", wxDefaultPosition, wxDefaultSize);
-    wxBoxSizer* sizer = new wxBoxSizer(wxVERTICAL);
+    wxDialog dialog(frame, wxID_ANY, "Remove Duplicates", wxDefaultPosition, wxSize(800, 600));
+    wxBoxSizer* main_sizer = new wxBoxSizer(wxVERTICAL);
 
+    // Warning text
     wxStaticText* warning = new wxStaticText(&dialog, wxID_ANY, 
         "WARNING: Save your map before proceeding!\n"
-        "Choose removal mode:");
-    sizer->Add(warning, 0, wxALL, 5);
+        "Choose removal mode and properties to ignore:");
+    main_sizer->Add(warning, 0, wxALL, 5);
 
-    // Button 1: Remove all duplicates from map (always enabled)
+    // Create horizontal sizer for buttons and properties
+    wxBoxSizer* content_sizer = new wxBoxSizer(wxHORIZONTAL);
+
+    // Left side - Buttons
+    wxStaticBoxSizer* button_sizer = new wxStaticBoxSizer(wxVERTICAL, &dialog, "Removal Options");
+    
     wxButton* removeAll = new wxButton(&dialog, wxID_ANY, "Remove All Duplicates");
-    sizer->Add(removeAll, 0, wxALL | wxEXPAND, 5);
+    button_sizer->Add(removeAll, 0, wxALL | wxEXPAND, 5);
 
-    // Button 2: Remove RAW brush item duplicates (enabled if RAW brush selected)
-    wxButton* removeSelected = new wxButton(&dialog, wxID_ANY, "Remove duplicates of item selected in RAW Brush");
+    wxButton* removeSelected = new wxButton(&dialog, wxID_ANY, "Remove Selected Item Duplicates");
     const Brush* brush = g_gui.GetCurrentBrush();
-    removeSelected->Enable(brush && brush->isRaw());  // Only needs RAW brush, no selection needed
-    sizer->Add(removeSelected, 0, wxALL | wxEXPAND, 5);
+    removeSelected->Enable(brush && brush->isRaw());
+    button_sizer->Add(removeSelected, 0, wxALL | wxEXPAND, 5);
 
-    // Button 3: Remove duplicates of items in selection
     wxButton* removeFromSelection = new wxButton(&dialog, wxID_ANY, "Remove Duplicates of Selected Items");
     removeFromSelection->Enable(editor->selection.size() > 0);
-    sizer->Add(removeFromSelection, 0, wxALL | wxEXPAND, 5);
+    button_sizer->Add(removeFromSelection, 0, wxALL | wxEXPAND, 5);
 
-    // Button 4: Remove duplicates only within selection area
     wxButton* removeInSelection = new wxButton(&dialog, wxID_ANY, "Remove Duplicates in Selection Area");
     removeInSelection->Enable(editor->selection.size() > 0);
-    sizer->Add(removeInSelection, 0, wxALL | wxEXPAND, 5);
+    button_sizer->Add(removeInSelection, 0, wxALL | wxEXPAND, 5);
 
+    content_sizer->Add(button_sizer, 1, wxEXPAND | wxALL, 5);
+
+    // Right side - Properties to ignore
+    wxStaticBoxSizer* props_sizer = new wxStaticBoxSizer(wxVERTICAL, &dialog, "Ignore Property Differences");
+    
+    // Create property checkboxes
+    wxCheckBox* ignore_unpassable = new wxCheckBox(&dialog, wxID_ANY, "Unpassable");
+    wxCheckBox* ignore_unmovable = new wxCheckBox(&dialog, wxID_ANY, "Unmovable");
+    wxCheckBox* ignore_block_missiles = new wxCheckBox(&dialog, wxID_ANY, "Block Missiles");
+    wxCheckBox* ignore_block_pathfinder = new wxCheckBox(&dialog, wxID_ANY, "Block Pathfinder");
+    wxCheckBox* ignore_readable = new wxCheckBox(&dialog, wxID_ANY, "Readable");
+    wxCheckBox* ignore_writeable = new wxCheckBox(&dialog, wxID_ANY, "Writeable");
+    wxCheckBox* ignore_pickupable = new wxCheckBox(&dialog, wxID_ANY, "Pickupable");
+    wxCheckBox* ignore_stackable = new wxCheckBox(&dialog, wxID_ANY, "Stackable");
+    wxCheckBox* ignore_rotatable = new wxCheckBox(&dialog, wxID_ANY, "Rotatable");
+    wxCheckBox* ignore_hangable = new wxCheckBox(&dialog, wxID_ANY, "Hangable");
+    wxCheckBox* ignore_hook_east = new wxCheckBox(&dialog, wxID_ANY, "Hook East");
+    wxCheckBox* ignore_hook_south = new wxCheckBox(&dialog, wxID_ANY, "Hook South");
+    wxCheckBox* ignore_elevation = new wxCheckBox(&dialog, wxID_ANY, "Has Elevation");
+
+    // Add checkboxes to properties sizer
+    props_sizer->Add(ignore_unpassable, 0, wxALL, 3);
+    props_sizer->Add(ignore_unmovable, 0, wxALL, 3);
+    props_sizer->Add(ignore_block_missiles, 0, wxALL, 3);
+    props_sizer->Add(ignore_block_pathfinder, 0, wxALL, 3);
+    props_sizer->Add(ignore_readable, 0, wxALL, 3);
+    props_sizer->Add(ignore_writeable, 0, wxALL, 3);
+    props_sizer->Add(ignore_pickupable, 0, wxALL, 3);
+    props_sizer->Add(ignore_stackable, 0, wxALL, 3);
+    props_sizer->Add(ignore_rotatable, 0, wxALL, 3);
+    props_sizer->Add(ignore_hangable, 0, wxALL, 3);
+    props_sizer->Add(ignore_hook_east, 0, wxALL, 3);
+    props_sizer->Add(ignore_hook_south, 0, wxALL, 3);
+    props_sizer->Add(ignore_elevation, 0, wxALL, 3);
+
+    content_sizer->Add(props_sizer, 1, wxEXPAND | wxALL, 5);
+
+    main_sizer->Add(content_sizer, 1, wxEXPAND);
+
+    // Cancel button at bottom
     wxButton* cancel = new wxButton(&dialog, wxID_CANCEL, "Cancel");
-    sizer->Add(cancel, 0, wxALL | wxEXPAND, 5);
+    main_sizer->Add(cancel, 0, wxALL | wxCENTER, 5);
 
-    dialog.SetSizer(sizer);
-    sizer->Fit(&dialog);
+    dialog.SetSizer(main_sizer);
+
+    // Previous button handlers remain the same, but need to capture checkbox states
+    // and pass them to the cleanDuplicateItems function...
+
+    // Create a struct to hold property flags
+    struct PropertyFlags {
+        bool ignore_unpassable;
+        bool ignore_unmovable;
+        bool ignore_block_missiles;
+        bool ignore_block_pathfinder;
+        bool ignore_readable;
+        bool ignore_writeable;
+        bool ignore_pickupable;
+        bool ignore_stackable;
+        bool ignore_rotatable;
+        bool ignore_hangable;
+        bool ignore_hook_east;
+        bool ignore_hook_south;
+        bool ignore_elevation;
+    };
 
     // Button 1 handler: Remove all duplicates
     removeAll->Bind(wxEVT_BUTTON, [&](wxCommandEvent&) {
+        // Use global PropertyFlags instead of local definition
+        ::PropertyFlags flags = {
+            ignore_unpassable->GetValue(),
+            ignore_unmovable->GetValue(),
+            ignore_block_missiles->GetValue(),
+            ignore_block_pathfinder->GetValue(),
+            ignore_readable->GetValue(),
+            ignore_writeable->GetValue(),
+            ignore_pickupable->GetValue(),
+            ignore_stackable->GetValue(),
+            ignore_rotatable->GetValue(),
+            ignore_hangable->GetValue(),
+            ignore_hook_east->GetValue(),
+            ignore_hook_south->GetValue(),
+            ignore_elevation->GetValue()
+        };
+
         g_gui.CreateLoadBar("Removing all duplicate items...");
-        uint32_t removed = editor->map.cleanDuplicateItems(std::vector<std::pair<uint16_t, uint16_t>>());
+        uint32_t removed = editor->map.cleanDuplicateItems(std::vector<std::pair<uint16_t, uint16_t>>(), flags);
         g_gui.DestroyLoadBar();
 
         std::ostringstream ss;
@@ -2370,11 +2449,28 @@ void MainMenuBar::OnMapRemoveDuplicates(wxCommandEvent& WXUNUSED(event)) {
         const RAWBrush* rawBrush = dynamic_cast<const RAWBrush*>(g_gui.GetCurrentBrush());
         if (!rawBrush) return;
 
+        // Use global PropertyFlags instead of local definition
+        ::PropertyFlags flags = {
+            ignore_unpassable->GetValue(),
+            ignore_unmovable->GetValue(),
+            ignore_block_missiles->GetValue(),
+            ignore_block_pathfinder->GetValue(),
+            ignore_readable->GetValue(),
+            ignore_writeable->GetValue(),
+            ignore_pickupable->GetValue(),
+            ignore_stackable->GetValue(),
+            ignore_rotatable->GetValue(),
+            ignore_hangable->GetValue(),
+            ignore_hook_east->GetValue(),
+            ignore_hook_south->GetValue(),
+            ignore_elevation->GetValue()
+        };
+
         uint16_t itemId = rawBrush->getItemType()->id;
         std::vector<std::pair<uint16_t, uint16_t>> range = {{itemId, itemId}};
 
         g_gui.CreateLoadBar("Removing selected item duplicates...");
-        uint32_t removed = editor->map.cleanDuplicateItems(range);
+        uint32_t removed = editor->map.cleanDuplicateItems(range, flags);
         g_gui.DestroyLoadBar();
 
         std::ostringstream ss;
@@ -2383,33 +2479,60 @@ void MainMenuBar::OnMapRemoveDuplicates(wxCommandEvent& WXUNUSED(event)) {
         dialog.EndModal(wxID_OK);
     });
 
-    // Button 3 handler: Remove duplicates of selected items
+    // Button 3 handler: Remove duplicates of items in selection
     removeFromSelection->Bind(wxEVT_BUTTON, [&](wxCommandEvent&) {
-        std::vector<std::pair<uint16_t, uint16_t>> ranges;
-        std::set<uint16_t> selectedIds;
-
-        for(Tile* tile : editor->selection.getTiles()) {
-            if(!tile) continue;
-            for(Item* item : tile->getSelectedItems()) {
-                selectedIds.insert(item->getID());
-            }
-        }
-
-        for(uint16_t id : selectedIds) {
-            ranges.emplace_back(id, id);
-        }
-
-        if(ranges.empty()) {
-            g_gui.PopupDialog("Error", "No items selected!", wxOK);
+        const TileSet& tiles = editor->selection.getTiles();
+        if(tiles.empty()) {
+            g_gui.PopupDialog("Error", "No area selected!", wxOK);
             return;
         }
 
+        // Collect all unique item IDs from selection
+        std::set<uint16_t> selectedIds;
+        for(Tile* tile : tiles) {
+            if(!tile) continue;
+            
+            if(tile->ground) {
+                selectedIds.insert(tile->ground->getID());
+            }
+            
+            for(Item* item : tile->items) {
+                if(item) {
+                    selectedIds.insert(item->getID());
+                }
+            }
+        }
+
+        // Convert to ranges for single IDs
+        std::vector<std::pair<uint16_t, uint16_t>> ranges;
+        for(uint16_t id : selectedIds) {
+            ranges.push_back({id, id});
+        }
+
+        // Use global PropertyFlags instead of local definition
+        ::PropertyFlags flags = {
+            ignore_unpassable->GetValue(),
+            ignore_unmovable->GetValue(),
+            ignore_block_missiles->GetValue(),
+            ignore_block_pathfinder->GetValue(),
+            ignore_readable->GetValue(),
+            ignore_writeable->GetValue(),
+            ignore_pickupable->GetValue(),
+            ignore_stackable->GetValue(),
+            ignore_rotatable->GetValue(),
+            ignore_hangable->GetValue(),
+            ignore_hook_east->GetValue(),
+            ignore_hook_south->GetValue(),
+            ignore_elevation->GetValue()
+        };
+
         g_gui.CreateLoadBar("Removing duplicates of selected items...");
-        uint32_t removed = editor->map.cleanDuplicateItems(ranges);
+        uint32_t removed = editor->map.cleanDuplicateItems(ranges, flags);
         g_gui.DestroyLoadBar();
 
         std::ostringstream ss;
-        ss << "Remove Duplicates completed:\n" << removed << " duplicates removed.";
+        ss << "Remove Duplicates completed:\n" << removed << " duplicates of " 
+           << selectedIds.size() << " selected item types removed.";
         g_gui.PopupDialog("Remove Duplicates", ss.str(), wxOK);
         dialog.EndModal(wxID_OK);
     });
@@ -2422,33 +2545,50 @@ void MainMenuBar::OnMapRemoveDuplicates(wxCommandEvent& WXUNUSED(event)) {
             return;
         }
 
-        uint32_t removed = 0;
-        g_gui.CreateLoadBar("Removing duplicates in selection area...");
+        // Use global PropertyFlags instead of local definition
+        ::PropertyFlags flags = {
+            ignore_unpassable->GetValue(),
+            ignore_unmovable->GetValue(),
+            ignore_block_missiles->GetValue(),
+            ignore_block_pathfinder->GetValue(),
+            ignore_readable->GetValue(),
+            ignore_writeable->GetValue(),
+            ignore_pickupable->GetValue(),
+            ignore_stackable->GetValue(),
+            ignore_rotatable->GetValue(),
+            ignore_hangable->GetValue(),
+            ignore_hook_east->GetValue(),
+            ignore_hook_south->GetValue(),
+            ignore_elevation->GetValue()
+        };
+
+        uint32_t total_removed = 0;
+        g_gui.CreateLoadBar("Removing duplicates in selection...");
         
+        // Process each selected tile independently
         for(Tile* tile : tiles) {
             if(!tile) continue;
-            std::set<uint16_t> seen_ids;
-            bool tile_modified = false;
             
-            auto& items = tile->items;
-            for(auto iit = items.rbegin(); iit != items.rend();) {
-                Item* item = *iit;
-                uint16_t id = item->getID();
-                
-                if(!seen_ids.insert(id).second) {
-                    delete item;
-                    iit = decltype(iit)(items.erase((++iit).base()));
-                    removed++;
-                    tile_modified = true;
-                } else {
-                    ++iit;
-                }
+            std::vector<std::pair<uint16_t, uint16_t>> empty_ranges; // Process all IDs within tile
+            // Create a temporary map with single tile for processing
+            Map tempMap;
+            Tile* tempTile = tile->deepCopy(tempMap); // Pass tempMap instead of Position
+            tempMap.setTile(tempTile->getPosition(), tempTile);
+            
+            uint32_t removed = tempMap.cleanDuplicateItems(empty_ranges, flags);
+            if(removed > 0) {
+                // If items were removed, replace original tile with cleaned tile
+                Tile* cleanedTile = tempMap.getTile(tempTile->getPosition());
+                editor->map.setTile(tile->getPosition(), cleanedTile->deepCopy(editor->map)); // Pass editor->map
+                total_removed += removed;
             }
         }
         
         g_gui.DestroyLoadBar();
+
         std::ostringstream ss;
-        ss << "Remove Duplicates completed:\n" << removed << " duplicates removed from selection area.";
+        ss << "Remove Duplicates completed:\n" << total_removed 
+           << " duplicate items removed from " << tiles.size() << " selected tiles.";
         g_gui.PopupDialog("Remove Duplicates", ss.str(), wxOK);
         dialog.EndModal(wxID_OK);
     });
