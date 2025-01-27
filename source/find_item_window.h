@@ -120,6 +120,7 @@ protected:
 	wxCheckBox* floor_change;
 	wxCheckBox* invalid_item;
 	wxCheckBox* use_range;
+	wxCheckBox* has_light;
 
 	FindDialogListBox* items_list;
 	wxStdDialogButtonSizer* buttons_box_sizer;

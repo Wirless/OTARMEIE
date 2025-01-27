@@ -225,6 +225,12 @@ bool Item::hasProperty(enum ITEMPROPERTY prop) const {
 			}
 			break;
 
+		case HASLIGHT:
+			if (hasLight()) {
+				return true;
+			}
+			break;
+
 		default:
 			return false;
 	}

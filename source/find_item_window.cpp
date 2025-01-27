@@ -240,10 +240,15 @@ FindItemDialog::FindItemDialog(wxWindow* parent, const wxString& title, bool onl
 	floor_change = newd wxCheckBox(properties_box_sizer->GetStaticBox(), wxID_ANY, "Floor Change", wxDefaultPosition, wxDefaultSize, wxCHK_3STATE | wxCHK_ALLOW_3RD_STATE_FOR_USER);
 	properties_box_sizer->Add(floor_change, 0, wxALL, 5);
 
+	has_light = newd wxCheckBox(properties_box_sizer->GetStaticBox(), wxID_ANY, "Has Light", 
+		wxDefaultPosition, wxDefaultSize, wxCHK_3STATE | wxCHK_ALLOW_3RD_STATE_FOR_USER);
+	properties_box_sizer->Add(has_light, 0, wxALL, 5);
+
 	// Add a tooltip explaining the states
 	wxString tooltip = "Click to cycle through states:\n[ ] Ignore this property\n[V] Must have this property\n[-] Must NOT have this property";
-	for(wxCheckBox* checkbox : {unpassable, unmovable, block_missiles, block_pathfinder, readable, writeable, 
-		pickupable, stackable, rotatable, hangable, hook_east, hook_south, has_elevation, ignore_look, floor_change}) {
+	for(wxCheckBox* checkbox : {unpassable, unmovable, block_missiles, block_pathfinder, 
+		readable, writeable, pickupable, stackable, rotatable, hangable, hook_east, 
+		hook_south, has_elevation, ignore_look, floor_change, has_light}) {
 		checkbox->SetToolTip(tooltip);
 	}
 
@@ -304,6 +309,7 @@ FindItemDialog::FindItemDialog(wxWindow* parent, const wxString& title, bool onl
 	ignore_look->Connect(wxEVT_COMMAND_CHECKBOX_CLICKED, wxCommandEventHandler(FindItemDialog::OnPropertyChange), NULL, this);
 	floor_change->Connect(wxEVT_COMMAND_CHECKBOX_CLICKED, wxCommandEventHandler(FindItemDialog::OnPropertyChange), NULL, this);
 	invalid_item->Connect(wxEVT_COMMAND_CHECKBOX_CLICKED, wxCommandEventHandler(FindItemDialog::OnPropertyChange), NULL, this);
+	has_light->Connect(wxEVT_COMMAND_CHECKBOX_CLICKED, wxCommandEventHandler(FindItemDialog::OnPropertyChange), NULL, this);
 
 	// Connect the refresh button event
 	refresh_button->Connect(wxEVT_BUTTON, wxCommandEventHandler(FindItemDialog::OnRefreshClick), NULL, this);
@@ -397,6 +403,7 @@ void FindItemDialog::EnableProperties(bool enable) {
 	has_elevation->Enable(enable);
 	ignore_look->Enable(enable);
 	floor_change->Enable(enable);
+	has_light->Enable(enable);
 }
 
 void FindItemDialog::RefreshContentsInternal() {
@@ -645,7 +652,8 @@ void FindItemDialog::RefreshContentsInternal() {
 		bool has_selected = false;
 		// Check if any checkbox is not in unchecked state
 		for(wxCheckBox* checkbox : {unpassable, unmovable, block_missiles, block_pathfinder, readable, writeable, 
-			pickupable, stackable, rotatable, hangable, hook_east, hook_south, has_elevation, ignore_look, floor_change}) {
+			pickupable, stackable, rotatable, hangable, hook_east, hook_south, has_elevation, ignore_look, 
+			floor_change, has_light}) {
 			if(checkbox->Get3StateValue() != wxCHK_UNCHECKED) {
 				has_selected = true;
 				break;
@@ -690,7 +698,9 @@ void FindItemDialog::RefreshContentsInternal() {
 					(ignore_look->Get3StateValue() == wxCHK_CHECKED && !item.ignoreLook) ||
 					(ignore_look->Get3StateValue() == wxCHK_UNDETERMINED && item.ignoreLook) ||
 					(floor_change->Get3StateValue() == wxCHK_CHECKED && !item.floorChangeDown && !item.floorChangeNorth && !item.floorChangeSouth && !item.floorChangeEast && !item.floorChangeWest) ||
-					(floor_change->Get3StateValue() == wxCHK_UNDETERMINED && (item.floorChangeDown || item.floorChangeNorth || item.floorChangeSouth || item.floorChangeEast || item.floorChangeWest))) {
+					(floor_change->Get3StateValue() == wxCHK_UNDETERMINED && (item.floorChangeDown || item.floorChangeNorth || item.floorChangeSouth || item.floorChangeEast || item.floorChangeWest)) ||
+					(has_light->Get3StateValue() == wxCHK_CHECKED && !item.sprite->hasLight()) ||
+					(has_light->Get3StateValue() == wxCHK_UNDETERMINED && item.sprite->hasLight())) {
 					continue;
 				}
 

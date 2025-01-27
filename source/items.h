@@ -413,6 +413,10 @@ public:
 	int alwaysOnTopOrder;
 	uint16_t rotateTo;
 	BorderType border_alignment;
+
+	bool hasLight;
+
+	
 };
 
 class ItemDatabase {
