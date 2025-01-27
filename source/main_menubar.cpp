@@ -36,6 +36,7 @@
 #include "materials.h"
 #include "live_client.h"
 #include "live_server.h"
+#include "string_utils.h"
 
 BEGIN_EVENT_TABLE(MainMenuBar, wxEvtHandler)
 END_EVENT_TABLE()
@@ -113,6 +114,8 @@ MainMenuBar::MainMenuBar(MainFrame* frame) :
 	MAKE_ACTION(CLEAR_MODIFIED_STATE, wxITEM_NORMAL, OnClearModifiedState);
 	MAKE_ACTION(MAP_REMOVE_ITEMS, wxITEM_NORMAL, OnMapRemoveItems);
 	MAKE_ACTION(MAP_REMOVE_CORPSES, wxITEM_NORMAL, OnMapRemoveCorpses);
+	MAKE_ACTION(MAP_REMOVE_DUPLICATES, wxITEM_NORMAL, OnMapRemoveDuplicates);
+
 	MAKE_ACTION(MAP_REMOVE_UNREACHABLE_TILES, wxITEM_NORMAL, OnMapRemoveUnreachable);
 	MAKE_ACTION(MAP_CLEANUP, wxITEM_NORMAL, OnMapCleanup);
 	MAKE_ACTION(MAP_CLEAN_HOUSE_ITEMS, wxITEM_NORMAL, OnMapCleanHouseItems);
@@ -198,6 +201,7 @@ MainMenuBar::MainMenuBar(MainFrame* frame) :
 	MAKE_ACTION(EXTENSIONS, wxITEM_NORMAL, OnListExtensions);
 	MAKE_ACTION(GOTO_WEBSITE, wxITEM_NORMAL, OnGotoWebsite);
 	MAKE_ACTION(ABOUT, wxITEM_NORMAL, OnAbout);
+
 
 	// A deleter, this way the frame does not need
 	// to bother deleting us.
@@ -365,6 +369,7 @@ void MainMenuBar::Update() {
 
 	EnableItem(MAP_REMOVE_ITEMS, is_host);
 	EnableItem(MAP_REMOVE_CORPSES, is_local);
+	EnableItem(MAP_REMOVE_DUPLICATES, is_local);  
 	EnableItem(MAP_REMOVE_UNREACHABLE_TILES, is_local);
 	EnableItem(CLEAR_INVALID_HOUSES, is_local);
 	EnableItem(CLEAR_MODIFIED_STATE, is_local);
@@ -2220,4 +2225,116 @@ void MainMenuBar::SearchItems(bool unique, bool action, bool container, bool wri
 	for (std::vector<std::pair<Tile*, Item*>>::iterator iter = found.begin(); iter != found.end(); ++iter) {
 		result->AddPosition(searcher.desc(iter->second), iter->first->getPosition());
 	}
+}
+/*
+Task: Implement Remove Duplicates Functionality
+(Building upon existing MAP_CLEANUP functionality)
+
+Reference Implementation:
+The existing MAP_CLEANUP (OnMapCleanup) provides useful patterns we can reuse:
+- Uses g_gui.GetCurrentMap().cleanInvalidTiles() for tile iteration
+- Has confirmation dialog pattern
+- Already handles map state updates
+
+Goal: Create a function that removes duplicate items from all positions on the map with two operating modes:
+1. Range Mode: Remove duplicates of specific item IDs within user-defined ranges
+2. Global Mode: Remove all duplicates regardless of item type
+
+Implementation Steps:
+1. Create similar but modified cleanDuplicateItems() method in Map class:
+   - Reuse tile iteration logic from cleanInvalidTiles()
+   - Add range parameter support
+   - Track statistics like cleanInvalidTiles() does
+
+2. Create input dialog similar to cleanup:
+   - Input of ID ranges (optional)
+   - If no range specified, operates in global mode
+   - Warning message like cleanup's "Do you want to remove all duplicate items from the map?"
+
+3. Implement duplicate detection logic:
+   Range Mode:
+   - Use std::set or similar to track item IDs within specified ranges
+   - Keep first instance of each item
+   - No special item exceptions
+
+   Global Mode:
+   - Use std::set for all item IDs
+   - Keep first instance of each item
+   - Handle stackable items properly
+
+4. Progress Tracking:
+   - Reuse g_gui.CreateLoadBar() pattern from cleanup
+   - Count items removed and tiles affected
+   - Show progress during operation
+
+5. Results:
+   - Show summary dialog with statistics
+   - Option to undo like cleanup offers
+
+Technical Considerations:
+- Reuse Map::cleanInvalidTiles() iteration pattern for performance
+- Preserve item attributes of kept instances
+- Handle containers like cleanup does
+- Use same action queue pattern for undo/redo
+- Maintain map state consistency like cleanup
+
+Safety Measures:
+- Use similar confirmation pattern to cleanup
+- Progress indicator using existing GUI patterns
+- Detailed results summary
+- Option to cancel during range input
+
+Key Differences from Cleanup:
+- Adds range-based filtering option
+- Focuses on duplicates rather than invalid items
+- Preserves first instance rather than removing all
+*/
+
+// Helper function to parse range string into pairs of IDs
+std::vector<std::pair<uint16_t, uint16_t>> ParseRangeString(const wxString& input) {
+    std::vector<std::pair<uint16_t, uint16_t>> ranges;
+    std::string str = as_lower_str(nstr(input));
+    std::vector<std::string> parts = splitString(str, ',');
+    
+    for(const auto& part : parts) {
+        if(part.find('-') != std::string::npos) {
+            std::vector<std::string> range = splitString(part, '-');
+            if(range.size() == 2 && isInteger(range[0]) && isInteger(range[1])) {
+                uint16_t from = static_cast<uint16_t>(std::stoi(range[0]));
+                uint16_t to = static_cast<uint16_t>(std::stoi(range[1]));
+                if(from <= to) {
+                    ranges.emplace_back(from, to);
+                }
+            }
+        } else if(isInteger(part)) {
+            uint16_t id = static_cast<uint16_t>(std::stoi(part));
+            ranges.emplace_back(id, id);
+        }
+    }
+    
+    return ranges;
+}
+
+void MainMenuBar::OnMapRemoveDuplicates(wxCommandEvent& WXUNUSED(event)) {
+    Editor* editor = g_gui.GetCurrentEditor();
+    if (!editor) {
+        return;
+    }
+
+    int ok = g_gui.PopupDialog("Remove Duplicates", 
+        "Do you want to remove all duplicate items from the map?\n\n"
+        "WARNING: Save your map before proceeding!", 
+        wxYES | wxNO);
+
+    if (ok == wxID_YES) {
+        g_gui.CreateLoadBar("Removing duplicate items...");
+        uint32_t removed = editor->map.cleanDuplicateItems(std::vector<std::pair<uint16_t, uint16_t>>());
+        g_gui.DestroyLoadBar();
+
+        std::ostringstream ss;
+        ss << "Remove Duplicates completed:\n";
+        ss << removed << " duplicate items removed.\n\n";
+        ss << "Please verify the results and save if satisfied.";
+        g_gui.PopupDialog("Remove Duplicates", ss.str(), wxOK);
+    }
 }

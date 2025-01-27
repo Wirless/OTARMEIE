@@ -156,4 +156,6 @@ inline void Editor::undraw(const PositionVector& todraw, PositionVector& toborde
 	drawInternal(todraw, toborder, alt, false);
 }
 
+
+
 #endif

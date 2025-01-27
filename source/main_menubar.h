@@ -156,6 +156,7 @@ namespace MenuBar {
 		ABOUT,
 
 		EXPERIMENTAL_FOG,
+		MAP_REMOVE_DUPLICATES,
 	};
 }
 
@@ -251,6 +252,7 @@ public:
 	void OnMapCleanup(wxCommandEvent& event);
 	void OnMapProperties(wxCommandEvent& event);
 	void OnMapStatistics(wxCommandEvent& event);
+	void OnMapRemoveDuplicates(wxCommandEvent& (event));
 
 	// View Menu
 	void OnToolbars(wxCommandEvent& event);

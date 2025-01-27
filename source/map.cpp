@@ -22,6 +22,7 @@
 #include "map.h"
 
 #include <sstream>
+#include "string_utils.h"
 
 Map::Map() :
 	BaseMap(),
@@ -637,4 +638,58 @@ bool Map::exportMinimap(FileName filename, int floor /*= GROUND_LAYER*/, bool di
 	}
 
 	return true;
+}
+
+uint32_t Map::cleanDuplicateItems(const std::vector<std::pair<uint16_t, uint16_t>>& ranges) {
+	uint32_t duplicates_removed = 0;
+	uint32_t tiles_affected = 0;
+	
+	// Create progress bar tracking
+	uint32_t tiles_done = 0;
+	
+	// Iterate through all tiles using MapIterator (like in cleanInvalidTiles)
+	for(MapIterator mit = begin(); mit != end(); ++mit) {
+		tiles_done++;
+		if(tiles_done % 0x10000 == 0) {
+			g_gui.SetLoadDone(int(tiles_done / double(getTileCount()) * 100.0));
+		}
+		
+		Tile* tile = (*mit)->get();
+		if(!tile || !tile->size()) {
+			continue;
+		}
+		
+		bool tile_modified = false;
+		std::set<uint16_t> seen_ids;
+		
+		// Iterate items in reverse to preserve first instance
+		auto &items = tile->items;
+		for(auto iit = items.rbegin(); iit != items.rend();) {
+			Item* item = *iit;
+			uint16_t id = item->getID();
+			
+			bool in_range = ranges.empty(); // If no ranges, check all items
+			for(const auto& range : ranges) {
+				if(id >= range.first && id <= range.second) {
+					in_range = true;
+					break;
+				}
+			}
+			
+			if(in_range && !seen_ids.insert(id).second) { // If already seen this ID
+				delete item;
+				iit = decltype(iit)(items.erase((++iit).base()));
+				duplicates_removed++;
+				tile_modified = true;
+			} else {
+				++iit;
+			}
+		}
+		
+		if(tile_modified) {
+			tiles_affected++;
+		}
+	}
+	
+	return duplicates_removed;
 }

@@ -124,6 +124,10 @@ public:
 		unnamed = false;
 	}
 
+	// Removes duplicate items from the map, optionally within specified ID ranges
+	// Returns number of items removed
+	uint32_t cleanDuplicateItems(const std::vector<std::pair<uint16_t, uint16_t>>& ranges);
+
 protected:
 	// Loads a map
 	bool open(const std::string identifier);
