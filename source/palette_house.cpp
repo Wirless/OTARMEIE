@@ -573,6 +573,18 @@ void EditHouseDialog::OnClickOK(wxCommandEvent& WXUNUSED(event)) {
 			return;
 		}
 
+		// Verify town selection
+		if (town_id_field->GetSelection() == wxNOT_FOUND) {
+			g_gui.PopupDialog(this, "Error", "You must select a town for this house.", wxOK);
+			return;
+		}
+
+		int* new_town_id = reinterpret_cast<int*>(town_id_field->GetClientData(town_id_field->GetSelection()));
+		if (!new_town_id) {
+			g_gui.PopupDialog(this, "Error", "Invalid town selection.", wxOK);
+			return;
+		}
+
 		if (g_settings.getInteger(Config::WARN_FOR_DUPLICATE_ID)) {
 			Houses& houses = map->houses;
 			for (HouseMap::const_iterator house_iter = houses.begin(); house_iter != houses.end(); ++house_iter) {
@@ -606,8 +618,6 @@ void EditHouseDialog::OnClickOK(wxCommandEvent& WXUNUSED(event)) {
 		}
 
 		// Transfer to house
-		int* new_town_id = reinterpret_cast<int*>(town_id_field->GetClientData(town_id_field->GetSelection()));
-
 		what_house->name = nstr(house_name);
 		what_house->rent = new_house_rent;
 		what_house->guildhall = guildhall_field->GetValue();
