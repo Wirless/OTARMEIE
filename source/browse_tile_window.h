@@ -34,12 +34,16 @@ public:
 	void OnClickSelectRaw(wxCommandEvent&);
 	void OnClickOK(wxCommandEvent&);
 	void OnClickCancel(wxCommandEvent&);
+	void OnClickUp(wxCommandEvent&);
+	void OnClickDown(wxCommandEvent&);
 
 protected:
 	BrowseTileListBox* item_list;
 	wxStaticText* item_count_txt;
 	wxButton* delete_button;
 	wxButton* select_raw_button;
+	wxButton* up_button;
+	wxButton* down_button;
 
 	DECLARE_EVENT_TABLE();
 };
