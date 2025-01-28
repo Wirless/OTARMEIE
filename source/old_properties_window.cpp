@@ -36,6 +36,40 @@
 // ============================================================================
 // Old Properties Window
 
+
+/*
+Current Task - Old Properties Window Improvements:
+
+1. Main Goal:
+- Make the properties window non-blocking like replace_items_window.cpp
+- Allow brush selection while properties window is open
+- Fix crashes related to container and item handling (when we achieve it as a non main window)
+
+2. Issues Being Addressed:
+- Access violation when checking canHoldText() on null items
+- Container handling crashes
+- Creature direction field not updating properly
+- Modal dialog blocking brush selection
+
+3. Required Changes:
+- Add proper null checks for item/creature/spawn pointers
+- Improve container handling safety
+- Fix creature direction field updates
+- Make window non-modal while maintaining functionality all the bugs above are when we try to implement a non modal window
+- Ensure proper cleanup of resources
+
+4. Implementation Strategy:
+- Add comprehensive null checks before accessing properties
+- Improve error handling for container operations
+- Fix creature direction field saving mechanism
+- Modify window behavior to allow background interaction
+- Maintain data integrity during property updates
+
+5. Note:
+NEVER REMOVE ANY PREVIOUS FUNCTIONALITY UNLESS SPECIFICALLY REQUESTED!
+Keep all existing features while adding improvements.
+*/
+
 BEGIN_EVENT_TABLE(OldPropertiesWindow, wxDialog)
 EVT_SET_FOCUS(OldPropertiesWindow::OnFocusChange)
 EVT_BUTTON(wxID_OK, OldPropertiesWindow::OnClickOK)
