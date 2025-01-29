@@ -37,6 +37,10 @@
 
 #include <wx/snglinst.h>
 
+// Add to the top with other includes
+#include <wx/cmdline.h>
+
+
 #if defined(__LINUX__) || defined(__WINDOWS__)
 	#include <GL/glut.h>
 #endif
@@ -118,26 +122,33 @@ bool Application::OnInit() {
 
 	// Load some internal stuff
 	g_settings.load();
+	// Force disable single instance check
+	g_settings.setInteger(Config::ONLY_ONE_INSTANCE, 0);
 	FixVersionDiscrapencies();
 	g_gui.LoadHotkeys();
 	ClientVersion::loadVersions();
 
+	// Add command line parser
+	wxCmdLineParser parser(argc, argv);
+	parser.AddSwitch("m", "multiple", "Allow multiple instances");
+	parser.Parse(false); // Don't show usage on error
+
 #ifdef _USE_PROCESS_COM
-	m_single_instance_checker = newd wxSingleInstanceChecker; // Instance checker has to stay alive throughout the applications lifetime
+	m_single_instance_checker = newd wxSingleInstanceChecker;
 	if (g_settings.getInteger(Config::ONLY_ONE_INSTANCE) && m_single_instance_checker->IsAnotherRunning()) {
 		RMEProcessClient client;
 		wxConnectionBase* connection = client.MakeConnection("localhost", "rme_host", "rme_talk");
 		if (connection) {
 			wxString fileName;
 			if (ParseCommandLineMap(fileName)) {
-				wxLogNull nolog; // We might get a timeout message if the file fails to open on the running instance. Let's not show that message.
+				wxLogNull nolog;
 				connection->Execute(fileName);
 			}
 			connection->Disconnect();
 			wxDELETE(connection);
 		}
 		wxDELETE(m_single_instance_checker);
-		return false; // Since we return false - OnExit is never called
+		return false;
 	}
 	// We act as server then
 	m_proc_server = newd RMEProcessServer();
@@ -344,8 +355,11 @@ void Application::OnFatalException() {
 
 bool Application::ParseCommandLineMap(wxString& fileName) {
 	if (argc == 2) {
-		fileName = wxString(argv[1]);
-		return true;
+		// Check if it's our --multiple flag first
+		if (wxString(argv[1]) != "-m" && wxString(argv[1]) != "--multiple") {
+			fileName = wxString(argv[1]);
+			return true;
+		}
 	} else if (argc == 3) {
 		if (argv[1] == "-ws") {
 			g_settings.setInteger(Config::WELCOME_DIALOG, argv[2] == "1" ? 1 : 0);

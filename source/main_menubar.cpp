@@ -202,6 +202,10 @@ MainMenuBar::MainMenuBar(MainFrame* frame) :
 	MAKE_ACTION(GOTO_WEBSITE, wxITEM_NORMAL, OnGotoWebsite);
 	MAKE_ACTION(ABOUT, wxITEM_NORMAL, OnAbout);
 
+	
+	MAKE_ACTION(ID_MENU_SERVER_HOST, wxITEM_NORMAL, OnHostServer);
+	MAKE_ACTION(ID_MENU_SERVER_CONNECT, wxITEM_NORMAL, OnConnectServer);
+
 
 	// A deleter, this way the frame does not need
 	// to bother deleting us.
@@ -228,6 +232,8 @@ MainMenuBar::MainMenuBar(MainFrame* frame) :
 	for (size_t i = 0; i < 10; ++i) {
 		frame->Connect(recentFiles.GetBaseId() + i, wxEVT_COMMAND_MENU_SELECTED, wxCommandEventHandler(MainMenuBar::OnOpenRecent), nullptr, this);
 	}
+
+	CreateServerMenu();
 }
 
 MainMenuBar::~MainMenuBar() {
@@ -2594,4 +2600,104 @@ void MainMenuBar::OnMapRemoveDuplicates(wxCommandEvent& WXUNUSED(event)) {
     });
 
     dialog.ShowModal();
+}
+
+void MainMenuBar::CreateServerMenu() {
+    wxMenu* server_menu = new wxMenu;
+    server_menu->Append(MAIN_FRAME_MENU + MenuBar::ID_MENU_SERVER_HOST, "Host a new server");
+    server_menu->Append(MAIN_FRAME_MENU + MenuBar::ID_MENU_SERVER_CONNECT, "Connect to an existing server");
+    
+    menubar->Append(server_menu, "&Server");
+}
+
+
+
+
+    
+
+void MainMenuBar::OnHostServer(wxCommandEvent& event) {
+    Editor* editor = g_gui.GetCurrentEditor();
+    if (!editor) {
+        g_gui.PopupDialog("Error", "You need to have a map open to host a server.", wxOK);
+        return;
+    }
+    if (editor->IsLive()) {
+        g_gui.PopupDialog("Error", "A server is already running on this map.", wxOK);
+        return;
+    }
+
+    wxDialog* host_dlg = new wxDialog(frame, wxID_ANY, "Host Server", wxDefaultPosition, wxDefaultSize);
+    
+    wxBoxSizer* sizer = new wxBoxSizer(wxVERTICAL);
+    wxFlexGridSizer* grid = new wxFlexGridSizer(2, 5, 5);
+
+    // Add port input
+    grid->Add(new wxStaticText(host_dlg, wxID_ANY, "Port:"));
+    wxSpinCtrl* port = new wxSpinCtrl(host_dlg, wxID_ANY, "31313", 
+        wxDefaultPosition, wxDefaultSize, wxSP_ARROW_KEYS, 1, 65535, 31313);
+    grid->Add(port);
+
+    sizer->Add(grid, 0, wxALL | wxEXPAND, 10);
+
+    // Add OK/Cancel buttons
+    wxBoxSizer* btn_sizer = new wxBoxSizer(wxHORIZONTAL);
+    btn_sizer->Add(new wxButton(host_dlg, wxID_OK, "Start"), 0, wxRIGHT, 5);
+    btn_sizer->Add(new wxButton(host_dlg, wxID_CANCEL, "Cancel"));
+    sizer->Add(btn_sizer, 0, wxALIGN_RIGHT | wxALL, 10);
+
+    host_dlg->SetSizer(sizer);
+    host_dlg->Fit();
+
+    if (host_dlg->ShowModal() == wxID_OK) {
+        LiveServer* server = editor->StartLiveServer();
+        server->setPort(port->GetValue());
+
+        if (!server->bind()) {
+            g_gui.PopupDialog("Error", "Could not start server. Port may be in use.", wxOK);
+            editor->CloseLiveServer();
+        } else {
+            server->createLogWindow(g_gui.tabbook);
+        }
+    }
+    
+    host_dlg->Destroy();
+}
+
+void MainMenuBar::OnConnectServer(wxCommandEvent& event) {
+	wxDialog* connect_dlg = new wxDialog(frame, wxID_ANY, "Connect to Server", wxDefaultPosition, wxDefaultSize);
+
+	wxBoxSizer* sizer = new wxBoxSizer(wxVERTICAL);
+	wxFlexGridSizer* grid = new wxFlexGridSizer(2, 5, 5);
+
+	// Add IP/Port inputs
+	grid->Add(new wxStaticText(connect_dlg, wxID_ANY, "IP Address:"));
+	wxTextCtrl* ip = new wxTextCtrl(connect_dlg, wxID_ANY, "localhost");
+	grid->Add(ip);
+
+	grid->Add(new wxStaticText(connect_dlg, wxID_ANY, "Port:"));
+	wxSpinCtrl* port = new wxSpinCtrl(connect_dlg, wxID_ANY, "31313", wxDefaultPosition, wxDefaultSize, wxSP_ARROW_KEYS, 1, 65535, 31313);
+	grid->Add(port);
+
+	sizer->Add(grid, 0, wxALL | wxEXPAND, 10);
+
+	// Add OK/Cancel buttons
+	wxBoxSizer* btn_sizer = new wxBoxSizer(wxHORIZONTAL);
+	btn_sizer->Add(new wxButton(connect_dlg, wxID_OK, "Connect"), 0, wxRIGHT, 5);
+	btn_sizer->Add(new wxButton(connect_dlg, wxID_CANCEL, "Cancel"));
+	sizer->Add(btn_sizer, 0, wxALIGN_RIGHT | wxALL, 10);
+
+	connect_dlg->SetSizer(sizer);
+	connect_dlg->Fit();
+
+	if (connect_dlg->ShowModal() == wxID_OK) {
+		LiveClient* client = new LiveClient();
+		client->createLogWindow(g_gui.tabbook);
+
+		if (!client->connect(nstr(ip->GetValue()), port->GetValue())) {
+			g_gui.PopupDialog("Error", "Could not connect to server.", wxOK);
+			delete client;
+		}
+	}
+
+	connect_dlg->Destroy();
 }

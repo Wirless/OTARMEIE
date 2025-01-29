@@ -154,6 +154,8 @@ namespace MenuBar {
 		EXTENSIONS,
 		GOTO_WEBSITE,
 		ABOUT,
+		ID_MENU_SERVER_HOST,
+		ID_MENU_SERVER_CONNECT,
 
 		EXPERIMENTAL_FOG,
 		MAP_REMOVE_DUPLICATES,
@@ -289,6 +291,14 @@ public:
 	void OnListExtensions(wxCommandEvent& event);
 	void OnGotoWebsite(wxCommandEvent& event);
 	void OnAbout(wxCommandEvent& event);
+
+	// Server menu
+	wxMenu* server_menu;
+	void CreateServerMenu();
+	
+	// Server menu event handlers
+	void OnHostServer(wxCommandEvent& event);
+	void OnConnectServer(wxCommandEvent& event);
 
 protected:
 	// Load and returns a menu item, also sets accelerator
