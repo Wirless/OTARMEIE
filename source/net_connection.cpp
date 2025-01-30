@@ -23,16 +23,14 @@ NetworkMessage::NetworkMessage() {
 }
 
 void NetworkMessage::clear() {
-	buffer.resize(4);
-	position = 4;
-	size = 0;
+	buffer.resize(4); // Reserve space for size header
+	position = 4;     // Start after size header
 }
 
 void NetworkMessage::expand(const size_t length) {
 	if (position + length >= buffer.size()) {
 		buffer.resize(position + length + 1);
 	}
-	size += length;
 }
 
 template <>
@@ -56,9 +54,8 @@ template <>
 void NetworkMessage::write<std::string>(const std::string& value) {
 	const size_t length = value.length();
 	write<uint16_t>(length);
-
 	expand(length);
-	memcpy(&buffer[position], &value[0], length);
+	memcpy(&buffer[position], value.data(), length);
 	position += length;
 }
 

@@ -55,15 +55,10 @@ public:
 	//
 	void updateCursor(const Position& position) { }
 
-protected:
 	void parseLoginPacket(NetworkMessage message);
 	void parseEditorPacket(NetworkMessage message);
-
-	// login packets
 	void parseHello(NetworkMessage& message);
 	void parseReady(NetworkMessage& message);
-
-	// editor packets
 	void parseNodeRequest(NetworkMessage& message);
 	void parseReceiveChanges(NetworkMessage& message);
 	void parseAddHouse(NetworkMessage& message);
@@ -88,5 +83,6 @@ protected:
 	friend class LiveLogTab;
 	friend class LiveServer;
 };
+
 
 #endif

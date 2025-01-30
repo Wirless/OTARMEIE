@@ -36,9 +36,12 @@ LiveServer::~LiveServer() {
 }
 
 bool LiveServer::bind() {
+	OutputDebugStringA("[LiveServer::bind] Starting server bind process\n");
+	
 	NetworkConnection& connection = NetworkConnection::getInstance();
 	if (!connection.start()) {
 		setLastError("The previous connection has not been terminated yet.");
+		OutputDebugStringA("[LiveServer::bind] Error: Previous connection still active\n");
 		return false;
 	}
 
@@ -48,16 +51,21 @@ bool LiveServer::bind() {
 	boost::asio::ip::tcp::endpoint endpoint(boost::asio::ip::tcp::v4(), port);
 	acceptor->open(endpoint.protocol());
 
+	OutputDebugStringA(wxString::Format("[LiveServer::bind] Binding to port %d\n", port).c_str());
+
 	boost::system::error_code error;
 	acceptor->set_option(boost::asio::ip::tcp::no_delay(true), error);
 	if (error) {
 		setLastError("Error: " + error.message());
+		OutputDebugStringA(wxString::Format("[LiveServer::bind] Failed to set TCP_NODELAY: %s\n",
+			error.message()).c_str());
 		return false;
 	}
 
 	acceptor->bind(endpoint);
 	acceptor->listen();
 
+	OutputDebugStringA("[LiveServer::bind] Server successfully bound and listening\n");
 	acceptClient();
 	return true;
 }
@@ -87,24 +95,32 @@ void LiveServer::close() {
 void LiveServer::acceptClient() {
 	static uint32_t id = 0;
 	if (stopped) {
+		OutputDebugStringA("[LiveServer::acceptClient] Server stopped, not accepting new clients\n");
 		return;
 	}
 
 	if (!socket) {
+		OutputDebugStringA("[LiveServer::acceptClient] Creating new accept socket\n");
 		socket = std::make_shared<boost::asio::ip::tcp::socket>(
 			NetworkConnection::getInstance().get_service()
 		);
 	}
 
+	OutputDebugStringA("[LiveServer::acceptClient] Waiting for new client connection\n");
 	acceptor->async_accept(*socket, [this](const boost::system::error_code& error) -> void {
 		if (error) {
-			//
+			OutputDebugStringA(wxString::Format("[LiveServer::acceptClient] Accept error: %s\n",
+				error.message()).c_str());
 		} else {
+			OutputDebugStringA(wxString::Format("[LiveServer::acceptClient] New client connected, ID: %d\n", 
+				id).c_str());
+				
 			LivePeer* peer = new LivePeer(this, std::move(*socket));
 			peer->log = log;
 			peer->receiveHeader();
 
 			clients.insert(std::make_pair(id++, peer));
+			OutputDebugStringA("[LiveServer::acceptClient] Client added to client list\n");
 		}
 		acceptClient();
 	});

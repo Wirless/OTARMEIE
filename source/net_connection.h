@@ -31,6 +31,7 @@ struct NetworkMessage {
 
 	void clear();
 	void expand(const size_t length);
+	size_t getSize() const { return buffer.size() - 4; } // Size of data without header
 
 	//
 	template <typename T>
@@ -50,7 +51,6 @@ struct NetworkMessage {
 	//
 	std::vector<uint8_t> buffer;
 	size_t position;
-	size_t size;
 };
 
 template <>
