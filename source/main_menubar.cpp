@@ -1517,30 +1517,112 @@ namespace OnMapRemoveUnreachable {
 }
 
 void MainMenuBar::OnMapRemoveUnreachable(wxCommandEvent& WXUNUSED(event)) {
-	if (!g_gui.IsEditorOpen()) {
-		return;
-	}
+    if (!g_gui.IsEditorOpen()) {
+        return;
+    }
 
-	int ok = g_gui.PopupDialog("Remove Unreachable Tiles", "Do you want to remove all unreachable items from the map?", wxYES | wxNO);
+    // Create custom dialog
+    wxDialog* dialog = new wxDialog(frame, wxID_ANY, "Remove Unreachable Tiles", 
+        wxDefaultPosition, wxDefaultSize, wxDEFAULT_DIALOG_STYLE);
+    
+    wxBoxSizer* mainSizer = new wxBoxSizer(wxVERTICAL);
+    wxBoxSizer* gridSizer = new wxBoxSizer(wxHORIZONTAL);
+    
+    // Create spin controls for X and Y ranges
+    wxStaticText* xLabel = new wxStaticText(dialog, wxID_ANY, "X Range:");
+    wxSpinCtrl* xRange = new wxSpinCtrl(dialog, wxID_ANY, "10", 
+        wxDefaultPosition, wxDefaultSize, wxSP_ARROW_KEYS, 1, 100, 10);
+    
+    wxStaticText* yLabel = new wxStaticText(dialog, wxID_ANY, "Y Range:");
+    wxSpinCtrl* yRange = new wxSpinCtrl(dialog, wxID_ANY, "8", 
+        wxDefaultPosition, wxDefaultSize, wxSP_ARROW_KEYS, 1, 100, 8);
+    
+    gridSizer->Add(xLabel, 0, wxALL | wxALIGN_CENTER_VERTICAL, 5);
+    gridSizer->Add(xRange, 0, wxALL | wxALIGN_CENTER_VERTICAL, 5);
+    gridSizer->Add(yLabel, 0, wxALL | wxALIGN_CENTER_VERTICAL, 5);
+    gridSizer->Add(yRange, 0, wxALL | wxALIGN_CENTER_VERTICAL, 5);
+    
+    mainSizer->Add(gridSizer, 0, wxALL | wxALIGN_CENTER, 5);
+    
+    // Add warning text
+    wxStaticText* warning = new wxStaticText(dialog, wxID_ANY, 
+        "Warning: This operation will remove all tiles that are not\n"
+        "reachable within the specified X and Y ranges.");
+    mainSizer->Add(warning, 0, wxALL | wxALIGN_CENTER, 10);
+    
+    // Add buttons
+    wxBoxSizer* buttonSizer = new wxBoxSizer(wxHORIZONTAL);
+    wxButton* okButton = new wxButton(dialog, wxID_OK, "OK");
+    wxButton* cancelButton = new wxButton(dialog, wxID_CANCEL, "Cancel");
+    
+    buttonSizer->Add(okButton, 0, wxALL, 5);
+    buttonSizer->Add(cancelButton, 0, wxALL, 5);
+    mainSizer->Add(buttonSizer, 0, wxALIGN_CENTER | wxALL, 5);
+    
+    dialog->SetSizer(mainSizer);
+    mainSizer->Fit(dialog);
+    dialog->Center();
 
-	if (ok == wxID_YES) {
-		g_gui.GetCurrentEditor()->selection.clear();
-		g_gui.GetCurrentEditor()->actionQueue->clear();
+    // Show dialog and process result
+    if (dialog->ShowModal() == wxID_OK) {
+        // Create modified condition with custom ranges
+        struct CustomRangeCondition : public OnMapRemoveUnreachable::condition {
+            int xRange;
+            int yRange;
+            
+            CustomRangeCondition(int x, int y) : xRange(x), yRange(y) {}
+            
+            bool operator()(Map& map, Tile* tile, long long removed, long long done, long long total) {
+                if (done % 0x1000 == 0) {
+                    g_gui.SetLoadDone((unsigned int)(100 * done / total));
+                }
 
-		OnMapRemoveUnreachable::condition func;
-		g_gui.CreateLoadBar("Searching map for tiles to remove...");
+                Position pos = tile->getPosition();
+                int sx = std::max(pos.x - xRange, 0);
+                int ex = std::min(pos.x + xRange, 65535);
+                int sy = std::max(pos.y - yRange, 0);
+                int ey = std::min(pos.y + yRange, 65535);
+                int sz, ez;
 
-		long long removed = remove_if_TileOnMap(g_gui.GetCurrentMap(), func);
+                if (pos.z <= GROUND_LAYER) {
+                    sz = 0;
+                    ez = 9;
+                } else {
+                    sz = std::max(pos.z - 2, GROUND_LAYER);
+                    ez = std::min(pos.z + 2, MAP_MAX_LAYER);
+                }
 
-		g_gui.DestroyLoadBar();
+                for (int z = sz; z <= ez; ++z) {
+                    for (int y = sy; y <= ey; ++y) {
+                        for (int x = sx; x <= ex; ++x) {
+                            if (isReachable(map.getTile(x, y, z))) {
+                                return false;
+                            }
+                        }
+                    }
+                }
+                return true;
+            }
+        };
 
-		wxString msg;
-		msg << removed << " tiles deleted.";
+        g_gui.GetCurrentEditor()->selection.clear();
+        g_gui.GetCurrentEditor()->actionQueue->clear();
 
-		g_gui.PopupDialog("Search completed", msg, wxOK);
+        CustomRangeCondition func(xRange->GetValue(), yRange->GetValue());
+        g_gui.CreateLoadBar("Searching map for tiles to remove...");
 
-		g_gui.GetCurrentMap().doChange();
-	}
+        long long removed = remove_if_TileOnMap(g_gui.GetCurrentMap(), func);
+
+        g_gui.DestroyLoadBar();
+
+        wxString msg;
+        msg << removed << " tiles deleted.";
+        g_gui.PopupDialog("Search completed", msg, wxOK);
+
+        g_gui.GetCurrentMap().doChange();
+    }
+    
+    dialog->Destroy();
 }
 
 void MainMenuBar::OnClearHouseTiles(wxCommandEvent& WXUNUSED(event)) {
