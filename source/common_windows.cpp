@@ -1450,28 +1450,28 @@ void EditTownsDialog::UpdateSelection(int new_selection) {
 		if (id_field->GetValue().ToLong(&tmplong)) {
 			uint32_t old_town_id = tmplong;
 
-			Town* old_town = nullptr;
+		Town* old_town = nullptr;
 
-			for (std::vector<Town*>::iterator town_iter = town_list.begin(); town_iter != town_list.end(); ++town_iter) {
-				if (old_town_id == (*town_iter)->getID()) {
-					old_town = *town_iter;
-					break;
-				}
+		for (std::vector<Town*>::iterator town_iter = town_list.begin(); town_iter != town_list.end(); ++town_iter) {
+			if (old_town_id == (*town_iter)->getID()) {
+				old_town = *town_iter;
+				break;
 			}
+		}
 
-			if (old_town) {
-				editor.map.getOrCreateTile(old_town->getTemplePosition())->getLocation()->decreaseTownCount();
+		if (old_town) {
+			editor.map.getOrCreateTile(old_town->getTemplePosition())->getLocation()->decreaseTownCount();
 
-				Position templePos = temple_position->GetPosition();
+			Position templePos = temple_position->GetPosition();
 
-				editor.map.getOrCreateTile(templePos)->getLocation()->increaseTownCount();
+			editor.map.getOrCreateTile(templePos)->getLocation()->increaseTownCount();
 
 				// printf("Changed town %d:%s\n", old_town_id, old_town->getName().c_str());
 				// printf("New values %d:%s:%d:%d:%d\n", town_id, town_name.c_str(), templepos.x, templepos.y, templepos.z);
 				old_town->setTemplePosition(templePos);
 
-				wxString new_name = name_field->GetValue();
-				wxString old_name = wxstr(old_town->getName());
+			wxString new_name = name_field->GetValue();
+			wxString old_name = wxstr(old_town->getName());
 
 				old_town->setName(nstr(new_name));
 				if (new_name != old_name) {
@@ -1662,29 +1662,56 @@ END_EVENT_TABLE()
 GotoPositionDialog::GotoPositionDialog(wxWindow* parent, Editor& editor) :
 	wxDialog(parent, wxID_ANY, "Go To Position", wxDefaultPosition, wxDefaultSize),
 	editor(editor) {
-	Map& map = editor.map;
-
-	// create topsizer
+	// Create topsizer
 	wxSizer* sizer = newd wxBoxSizer(wxVERTICAL);
 
-	posctrl = newd PositionCtrl(this, "Destination", map.getWidth() / 2, map.getHeight() / 2, GROUND_LAYER, map.getWidth(), map.getHeight());
-	sizer->Add(posctrl, 0, wxTOP | wxLEFT | wxRIGHT, 20);
+	// Create a static box with instructions
+	wxStaticBoxSizer* input_sizer = newd wxStaticBoxSizer(wxVERTICAL, this, "Enter Position");
+	
+	// Add some example formats as static text
+	wxString hint = "Supported formats:\n"
+				   "{x = 0, y = 0, z = 0}\n"
+				   "{\"x\":0,\"y\":0,\"z\":0}\n"
+				   "x, y, z\n"
+				   "(x, y, z)\n"
+				   "Position(x, y, z)";
+	input_sizer->Add(newd wxStaticText(this, wxID_ANY, hint), 0, wxALL, 5);
+
+	// Create the input field
+	position_field = newd wxTextCtrl(this, wxID_ANY, "", wxDefaultPosition, 
+								   wxSize(200, -1), wxTE_PROCESS_ENTER);
+	position_field->SetHint("Enter position...");
+	input_sizer->Add(position_field, 0, wxEXPAND | wxALL, 5);
+	
+	sizer->Add(input_sizer, 0, wxEXPAND | wxALL, 5);
 
 	// OK/Cancel buttons
-	wxSizer* tmpsizer = newd wxBoxSizer(wxHORIZONTAL);
-	tmpsizer->Add(newd wxButton(this, wxID_OK, "OK"), wxSizerFlags(1).Center());
-	tmpsizer->Add(newd wxButton(this, wxID_CANCEL, "Cancel"), wxSizerFlags(1).Center());
-	sizer->Add(tmpsizer, 0, wxALL | wxCENTER, 20); // Border to top too
+	wxSizer* button_sizer = newd wxBoxSizer(wxHORIZONTAL);
+	button_sizer->Add(newd wxButton(this, wxID_OK, "OK"), wxSizerFlags(1).Center());
+	button_sizer->Add(newd wxButton(this, wxID_CANCEL, "Cancel"), wxSizerFlags(1).Center());
+	sizer->Add(button_sizer, 0, wxALL | wxCENTER, 5);
+
+	// Bind events
+	position_field->Bind(wxEVT_TEXT_ENTER, &GotoPositionDialog::OnClickOK, this);
 
 	SetSizerAndFit(sizer);
 	Centre(wxBOTH);
+	
+	// Set focus to the input field
+	position_field->SetFocus();
 }
 
-void GotoPositionDialog::OnClickCancel(wxCommandEvent&) {
+void GotoPositionDialog::OnClickOK(wxCommandEvent& WXUNUSED(event)) {
+	Position pos;
+	std::string input = position_field->GetValue().ToStdString();
+	if (posFromClipboard(pos, editor.map.getWidth(), editor.map.getHeight(), input)) {
+		g_gui.SetScreenCenterPosition(pos);
+		EndModal(1);
+	} else {
+		g_gui.PopupDialog(this, "Error", "Invalid position format.", wxOK);
+	}
+}
+
+void GotoPositionDialog::OnClickCancel(wxCommandEvent& WXUNUSED(event)) {
 	EndModal(0);
-}
-
-void GotoPositionDialog::OnClickOK(wxCommandEvent&) {
-	g_gui.SetScreenCenterPosition(posctrl->GetPosition());
-	EndModal(1);
 }

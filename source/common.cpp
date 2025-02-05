@@ -176,46 +176,75 @@ std::string wstring2string(const std::wstring& widestring) {
 	return std::string((const char*)s.mb_str(wxConvUTF8));
 }
 
-bool posFromClipboard(Position& position, const int mapWidth /* = MAP_MAX_WIDTH */, const int mapHeight /* = MAP_MAX_HEIGHT */) {
-	if (!wxTheClipboard->Open()) {
-		return false;
-	}
+bool posFromClipboard(Position& position, int mapWidth, int mapHeight, const std::string& input) {
+	std::string text_to_parse;
+	
+	// If input is provided, use it directly, otherwise get from clipboard
+	if (!input.empty()) {
+		text_to_parse = input;
+	} else {
+		if (!wxTheClipboard->Open())
+			return false;
 
-	if (!wxTheClipboard->IsSupported(wxDF_TEXT)) {
+		wxTextDataObject data;
+		if (!wxTheClipboard->GetData(data)) {
+			wxTheClipboard->Close();
+			return false;
+		}
+
+		text_to_parse = data.GetText().ToStdString();
 		wxTheClipboard->Close();
-		return false;
+		
+		if (text_to_parse.empty())
+			return false;
 	}
 
-	wxTextDataObject data;
-	wxTheClipboard->GetData(data);
-
-	std::string input = data.GetText().ToStdString();
-	if (input.empty()) {
-		wxTheClipboard->Close();
-		return false;
-	}
-
-	bool done = false;
-	std::smatch matches;
-	static const std::regex expression = std::regex(R"(.*?(\d+).*?(\d+).*?(\d+).*?)", std::regex_constants::ECMAScript);
-	if (std::regex_match(input, matches, expression)) {
-		try {
-			const int tmpX = std::stoi(matches.str(1));
-			const int tmpY = std::stoi(matches.str(2));
-			const int tmpZ = std::stoi(matches.str(3));
-
-			const Position pastedPos = Position(tmpX, tmpY, tmpZ);
-			if (pastedPos.isValid() && tmpX <= mapWidth && tmpY <= mapHeight) {
-				position.x = tmpX;
-				position.y = tmpY;
-				position.z = tmpZ;
-				done = true;
+	// Extract just numbers, spaces, and commas
+	std::string numbers_only;
+	for (char c : text_to_parse) {
+		// Accept digits, spaces, commas, and convert any whitespace/separator to space
+		if (std::isdigit(c)) {
+			numbers_only += c;
+		} else if (std::isspace(c) || c == ',' || c == ';') {
+			// Convert any separator to space
+			if (!numbers_only.empty() && numbers_only.back() != ' ') {
+				numbers_only += ' ';
 			}
-		} catch (const std::out_of_range&) { }
+		}
 	}
 
-	wxTheClipboard->Close();
-	return done;
+	// Trim leading/trailing spaces
+	while (!numbers_only.empty() && numbers_only.front() == ' ') {
+		numbers_only.erase(0, 1);
+	}
+	while (!numbers_only.empty() && numbers_only.back() == ' ') {
+		numbers_only.pop_back();
+	}
+
+	// Split into numbers
+	std::istringstream iss(numbers_only);
+	std::vector<int> coords;
+	int num;
+	while (iss >> num) {
+		coords.push_back(num);
+	}
+
+	// If we have exactly 3 numbers, use them
+	if (coords.size() >= 3) {
+		const int tmpX = coords[0];
+		const int tmpY = coords[1];
+		const int tmpZ = coords[2];
+
+		const Position pastedPos = Position(tmpX, tmpY, tmpZ);
+		if (pastedPos.isValid() && tmpX <= mapWidth && tmpY <= mapHeight) {
+			position.x = tmpX;
+			position.y = tmpY;
+			position.z = tmpZ;
+			return true;
+		}
+	}
+
+	return false;
 }
 
 wxString b2yn(bool value) {

@@ -278,6 +278,7 @@ public:
 protected:
 	Editor& editor;
 	PositionCtrl* posctrl;
+	wxTextCtrl* position_field;
 
 	DECLARE_EVENT_TABLE();
 };
