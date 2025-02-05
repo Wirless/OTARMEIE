@@ -329,4 +329,7 @@ namespace MenuBar {
 	};
 }
 
+// Add this declaration before the MainMenuBar class
+std::vector<std::pair<uint16_t, uint16_t>> ParseRangeString(const wxString& input);
+
 #endif

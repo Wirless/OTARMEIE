@@ -1018,71 +1018,98 @@ void MainMenuBar::OnReplaceItems(wxCommandEvent& WXUNUSED(event)) {
 }
 
 namespace OnSearchForStuff {
-	struct Searcher {
-		Searcher() :
-			search_unique(false),
-			search_action(false),
-			search_container(false),
-			search_writeable(false) { }
+    struct Searcher {
+        Searcher() :
+            search_unique(false),
+            search_action(false),
+            search_container(false),
+            search_writeable(false) { }
 
-		bool search_unique;
-		bool search_action;
-		bool search_container;
-		bool search_writeable;
-		std::vector<std::pair<Tile*, Item*>> found;
+        bool search_unique;
+        bool search_action;
+        bool search_container;
+        bool search_writeable;
+        std::vector<std::pair<uint16_t, uint16_t>> uniqueRanges;
+        std::vector<std::pair<uint16_t, uint16_t>> actionRanges;
+        std::vector<std::pair<Tile*, Item*>> found;
 
-		void operator()(Map& map, Tile* tile, Item* item, long long done) {
-			if (done % 0x8000 == 0) {
-				g_gui.SetLoadDone((unsigned int)(100 * done / map.getTileCount()));
-			}
-			Container* container;
-			if ((search_unique && item->getUniqueID() > 0) || (search_action && item->getActionID() > 0) || (search_container && ((container = dynamic_cast<Container*>(item)) && container->getItemCount())) || (search_writeable && item->getText().length() > 0)) {
-				found.push_back(std::make_pair(tile, item));
-			}
-		}
+        bool isInRanges(uint16_t id, const std::vector<std::pair<uint16_t, uint16_t>>& ranges) {
+            if (ranges.empty()) return true;
+            for (const auto& range : ranges) {
+                if (id >= range.first && id <= range.second) {
+                    return true;
+                }
+            }
+            return false;
+        }
 
-		wxString desc(Item* item) {
-			wxString label;
-			if (item->getUniqueID() > 0) {
-				label << "UID:" << item->getUniqueID() << " ";
-			}
+        void operator()(Map& map, Tile* tile, Item* item, long long done) {
+            if (done % 0x8000 == 0) {
+                g_gui.SetLoadDone((unsigned int)(100 * done / map.getTileCount()));
+            }
+            Container* container;
+            bool shouldAdd = false;
 
-			if (item->getActionID() > 0) {
-				label << "AID:" << item->getActionID() << " ";
-			}
+            if (search_unique && item->getUniqueID() > 0 && isInRanges(item->getUniqueID(), uniqueRanges)) {
+                shouldAdd = true;
+            }
+            if (search_action && item->getActionID() > 0 && isInRanges(item->getActionID(), actionRanges)) {
+                shouldAdd = true;
+            }
+            if (search_container && ((container = dynamic_cast<Container*>(item)) && container->getItemCount())) {
+                shouldAdd = true;
+            }
+            if (search_writeable && item->getText().length() > 0) {
+                shouldAdd = true;
+            }
 
-			label << wxstr(item->getName());
+            if (shouldAdd) {
+                found.push_back(std::make_pair(tile, item));
+            }
+        }
 
-			if (dynamic_cast<Container*>(item)) {
-				label << " (Container) ";
-			}
+        wxString desc(Item* item) {
+            wxString label;
+            if (item->getUniqueID() > 0) {
+                label << "UID:" << item->getUniqueID() << " ";
+            }
 
-			if (item->getText().length() > 0) {
-				label << " (Text: " << wxstr(item->getText()) << ") ";
-			}
+            if (item->getActionID() > 0) {
+                label << "AID:" << item->getActionID() << " ";
+            }
 
-			return label;
-		}
+            label << wxstr(item->getName());
 
-		void sort() {
-			if (search_unique || search_action) {
-				std::sort(found.begin(), found.end(), Searcher::compare);
-			}
-		}
+            if (dynamic_cast<Container*>(item)) {
+                label << " (Container) ";
+            }
 
-		static bool compare(const std::pair<Tile*, Item*>& pair1, const std::pair<Tile*, Item*>& pair2) {
-			const Item* item1 = pair1.second;
-			const Item* item2 = pair2.second;
+            if (item->getText().length() > 0) {
+                label << " (Text: " << wxstr(item->getText()) << ") ";
+            }
 
-			if (item1->getActionID() != 0 || item2->getActionID() != 0) {
-				return item1->getActionID() < item2->getActionID();
-			} else if (item1->getUniqueID() != 0 || item2->getUniqueID() != 0) {
-				return item1->getUniqueID() < item2->getUniqueID();
-			}
+            return label;
+        }
 
-			return false;
-		}
-	};
+        void sort() {
+            if (search_unique || search_action) {
+                std::sort(found.begin(), found.end(), Searcher::compare);
+            }
+        }
+
+        static bool compare(const std::pair<Tile*, Item*>& pair1, const std::pair<Tile*, Item*>& pair2) {
+            const Item* item1 = pair1.second;
+            const Item* item2 = pair2.second;
+
+            if (item1->getActionID() != 0 || item2->getActionID() != 0) {
+                return item1->getActionID() < item2->getActionID();
+            } else if (item1->getUniqueID() != 0 || item2->getUniqueID() != 0) {
+                return item1->getUniqueID() < item2->getUniqueID();
+            }
+
+            return false;
+        }
+    };
 }
 
 void MainMenuBar::OnSearchForStuffOnMap(wxCommandEvent& WXUNUSED(event)) {
@@ -2275,102 +2302,93 @@ void MainMenuBar::OnCloseLive(wxCommandEvent& event) {
 	Update();
 }
 
-void MainMenuBar::SearchItems(bool unique, bool action, bool container, bool writable, bool onSelection /* = false*/) {
-	if (!unique && !action && !container && !writable) {
-		return;
-	}
+void MainMenuBar::SearchItems(bool unique, bool action, bool container, bool writable, bool onSelection /* = false */) {
+    if (!unique && !action && !container && !writable) {
+        return;
+    }
 
-	if (!g_gui.IsEditorOpen()) {
-		return;
-	}
+    if (!g_gui.IsEditorOpen()) {
+        return;
+    }
 
-	if (onSelection) {
-		g_gui.CreateLoadBar("Searching on selected area...");
-	} else {
-		g_gui.CreateLoadBar("Searching on map...");
-	}
+    // Create search dialog
+    wxDialog dialog(frame, wxID_ANY, "Advanced Search", wxDefaultPosition, wxDefaultSize);
+    wxBoxSizer* mainSizer = new wxBoxSizer(wxVERTICAL);
 
-	OnSearchForStuff::Searcher searcher;
-	searcher.search_unique = unique;
-	searcher.search_action = action;
-	searcher.search_container = container;
-	searcher.search_writeable = writable;
+    // Create input fields based on search type
+    wxTextCtrl* uniqueRangeCtrl = nullptr;
+    wxTextCtrl* actionRangeCtrl = nullptr;
 
-	foreach_ItemOnMap(g_gui.GetCurrentMap(), searcher, onSelection);
-	searcher.sort();
-	std::vector<std::pair<Tile*, Item*>>& found = searcher.found;
+    if (unique) {
+        wxStaticBoxSizer* uniqueSizer = new wxStaticBoxSizer(wxVERTICAL, &dialog, "Unique ID Range");
+        wxStaticText* uniqueHelp = new wxStaticText(&dialog, wxID_ANY, 
+            "Enter ranges (e.g., 1000-2000) or individual IDs separated by commas");
+        uniqueRangeCtrl = new wxTextCtrl(&dialog, wxID_ANY);
+        uniqueSizer->Add(uniqueHelp, 0, wxALL, 5);
+        uniqueSizer->Add(uniqueRangeCtrl, 0, wxEXPAND | wxALL, 5);
+        mainSizer->Add(uniqueSizer, 0, wxEXPAND | wxALL, 5);
+    }
 
-	g_gui.DestroyLoadBar();
+    if (action) {
+        wxStaticBoxSizer* actionSizer = new wxStaticBoxSizer(wxVERTICAL, &dialog, "Action ID Range");
+        wxStaticText* actionHelp = new wxStaticText(&dialog, wxID_ANY, 
+            "Enter ranges (e.g., 100-200) or individual IDs separated by commas");
+        actionRangeCtrl = new wxTextCtrl(&dialog, wxID_ANY);
+        actionSizer->Add(actionHelp, 0, wxALL, 5);
+        actionSizer->Add(actionRangeCtrl, 0, wxEXPAND | wxALL, 5);
+        mainSizer->Add(actionSizer, 0, wxEXPAND | wxALL, 5);
+    }
 
-	SearchResultWindow* result = g_gui.ShowSearchWindow();
-	result->Clear();
-	for (std::vector<std::pair<Tile*, Item*>>::iterator iter = found.begin(); iter != found.end(); ++iter) {
-		result->AddPosition(searcher.desc(iter->second), iter->first->getPosition());
-	}
+    // Add OK/Cancel buttons
+    wxStdDialogButtonSizer* buttonSizer = new wxStdDialogButtonSizer();
+    buttonSizer->AddButton(new wxButton(&dialog, wxID_OK));
+    buttonSizer->AddButton(new wxButton(&dialog, wxID_CANCEL));
+    buttonSizer->Realize();
+    mainSizer->Add(buttonSizer, 0, wxALIGN_CENTER | wxALL, 5);
+
+    dialog.SetSizer(mainSizer);
+    mainSizer->Fit(&dialog);
+    dialog.Center();
+
+    // Show dialog and process result
+    if (dialog.ShowModal() == wxID_OK) {
+        std::vector<std::pair<uint16_t, uint16_t>> uniqueRanges;
+        std::vector<std::pair<uint16_t, uint16_t>> actionRanges;
+
+        if (uniqueRangeCtrl) {
+            uniqueRanges = ParseRangeString(uniqueRangeCtrl->GetValue());
+        }
+        if (actionRangeCtrl) {
+            actionRanges = ParseRangeString(actionRangeCtrl->GetValue());
+        }
+
+        if (onSelection) {
+            g_gui.CreateLoadBar("Searching on selected area...");
+        } else {
+            g_gui.CreateLoadBar("Searching on map...");
+        }
+
+        OnSearchForStuff::Searcher searcher;
+        searcher.search_unique = unique;
+        searcher.search_action = action;
+        searcher.search_container = container;
+        searcher.search_writeable = writable;
+        searcher.uniqueRanges = uniqueRanges;
+        searcher.actionRanges = actionRanges;
+
+        foreach_ItemOnMap(g_gui.GetCurrentMap(), searcher, onSelection);
+        searcher.sort();
+        std::vector<std::pair<Tile*, Item*>>& found = searcher.found;
+
+        g_gui.DestroyLoadBar();
+
+        SearchResultWindow* result = g_gui.ShowSearchWindow();
+        result->Clear();
+        for (const auto& pair : found) {
+            result->AddPosition(searcher.desc(pair.second), pair.first->getPosition());
+        }
+    }
 }
-/*
-Task: Implement Remove Duplicates Functionality
-(Building upon existing MAP_CLEANUP functionality)
-
-Reference Implementation:
-The existing MAP_CLEANUP (OnMapCleanup) provides useful patterns we can reuse:
-- Uses g_gui.GetCurrentMap().cleanInvalidTiles() for tile iteration
-- Has confirmation dialog pattern
-- Already handles map state updates
-
-Goal: Create a function that removes duplicate items from all positions on the map with two operating modes:
-1. Range Mode: Remove duplicates of specific item IDs within user-defined ranges
-2. Global Mode: Remove all duplicates regardless of item type
-
-Implementation Steps:
-1. Create similar but modified cleanDuplicateItems() method in Map class:
-   - Reuse tile iteration logic from cleanInvalidTiles()
-   - Add range parameter support
-   - Track statistics like cleanInvalidTiles() does
-
-2. Create input dialog similar to cleanup:
-   - Input of ID ranges (optional)
-   - If no range specified, operates in global mode
-   - Warning message like cleanup's "Do you want to remove all duplicate items from the map?"
-
-3. Implement duplicate detection logic:
-   Range Mode:
-   - Use std::set or similar to track item IDs within specified ranges
-   - Keep first instance of each item
-   - No special item exceptions
-
-   Global Mode:
-   - Use std::set for all item IDs
-   - Keep first instance of each item
-   - Handle stackable items properly
-
-4. Progress Tracking:
-   - Reuse g_gui.CreateLoadBar() pattern from cleanup
-   - Count items removed and tiles affected
-   - Show progress during operation
-
-5. Results:
-   - Show summary dialog with statistics
-   - Option to undo like cleanup offers
-
-Technical Considerations:
-- Reuse Map::cleanInvalidTiles() iteration pattern for performance
-- Preserve item attributes of kept instances
-- Handle containers like cleanup does
-- Use same action queue pattern for undo/redo
-- Maintain map state consistency like cleanup
-
-Safety Measures:
-- Use similar confirmation pattern to cleanup
-- Progress indicator using existing GUI patterns
-- Detailed results summary
-- Option to cancel during range input
-
-Key Differences from Cleanup:
-- Adds range-based filtering option
-- Focuses on duplicates rather than invalid items
-- Preserves first instance rather than removing all
-*/
 
 // Helper function to parse range string into pairs of IDs
 std::vector<std::pair<uint16_t, uint16_t>> ParseRangeString(const wxString& input) {
