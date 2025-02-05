@@ -25,6 +25,8 @@
 #include "artprovider.h"
 #include <wx/artprov.h>
 #include <wx/mstream.h>
+#include "hotkey_manager.h"
+#include <pugixml.hpp>
 
 const wxString MainToolBar::STANDARD_BAR_NAME = "standard_toolbar";
 const wxString MainToolBar::BRUSHES_BAR_NAME = "brushes_toolbar";
@@ -606,4 +608,44 @@ wxAuiPaneInfo& MainToolBar::GetPane(ToolBarID id) {
 		default:
 			return wxAuiNullPaneInfo;
 	}
+}
+
+void MainToolBar::RegisterHotkeys() {
+	// Load hotkeys from menubar.xml
+	pugi::xml_document doc;
+	pugi::xml_parse_result result = doc.load_file("data/menubar.xml");
+	if (!result) {
+		g_gui.PopupDialog("Error", "Could not load menubar.xml", wxOK);
+		return;
+	}
+
+	pugi::xml_node menubar = doc.child("menubar");
+	if (!menubar) return;
+
+	// Traverse all menu items and register their hotkeys
+	for (pugi::xml_node menu = menubar.child("menu"); menu; menu = menu.next_sibling("menu")) {
+		for (pugi::xml_node item = menu.child("item"); item; item = item.next_sibling("item")) {
+			std::string hotkey = item.attribute("hotkey").as_string();
+			std::string action = item.attribute("action").as_string();
+			std::string help = item.attribute("help").as_string();
+			
+			if (!hotkey.empty()) {
+				g_hotkey_manager.RegisterHotkey(action, hotkey, help, [this, action]() {
+					// Convert action to event ID and trigger it
+					int eventId = g_gui.GetHotkeyEventId(action);
+					if (eventId != -1) {
+						wxCommandEvent evt(wxEVT_COMMAND_MENU_SELECTED, eventId);
+						g_gui.root->GetEventHandler()->ProcessEvent(evt);
+					}
+				});
+			}
+		}
+	}
+
+	// Register position dialog hotkey (moved from F3 to F4)
+	g_hotkey_manager.RegisterHotkey("GOTO_POSITION", "F4", "Go to Position", [this]() {
+		if (!g_gui.IsEditorOpen()) return;
+		GotoPositionDialog dialog(g_gui.root, *g_gui.GetCurrentEditor());
+		dialog.ShowModal();
+	});
 }

@@ -1,0 +1,324 @@
+#include "main.h"
+#include "hotkey_manager.h"
+#include "settings.h"
+#include "gui.h"
+#include <wx/listctrl.h>
+#include <wx/slider.h>
+#include <pugixml.hpp>
+
+HotkeyManager g_hotkey_manager;
+
+HotkeyManager::HotkeyManager() {
+    // Constructor is called before g_settings is initialized
+    // We'll load hotkeys later when needed
+}
+
+void HotkeyManager::RegisterHotkey(const std::string& name, const std::string& defaultKey,
+                                 const std::string& description, std::function<void()> callback) {
+    hotkeys[name] = {defaultKey, description, callback};
+    printf("Registered hotkey: %s -> %s\n", name.c_str(), defaultKey.c_str());
+}
+
+void HotkeyManager::LoadHotkeys() {
+    // Clear existing hotkeys before loading
+    hotkeys.clear();
+    
+    // First load default hotkeys from menubar.xml
+    wxString path = g_gui.GetDataDirectory() + "\\menubar.xml";
+    pugi::xml_document doc;
+    
+    OutputDebugStringA(wxString::Format("Loading menubar.xml from: %s\n", path).c_str());
+    
+    if (doc.load_file(path.mb_str())) {
+        pugi::xml_node menubar = doc.child("menubar");
+        if (menubar) {
+            LoadHotkeysFromNode(menubar);
+            OutputDebugStringA(wxString::Format("Loaded %zu hotkeys from menubar.xml\n", hotkeys.size()).c_str());
+        } else {
+            OutputDebugStringA("Failed to find menubar node in XML\n");
+        }
+    } else {
+        OutputDebugStringA(wxString::Format("Failed to load menubar.xml from: %s\n", path).c_str());
+    }
+
+    // Then override with any saved custom hotkeys if settings are available
+    if (&g_settings != nullptr) {
+        size_t index = 0;
+        for (auto& [name, info] : hotkeys) {
+            uint32_t settingKey = Config::HOTKEY_BASE + index;
+            std::string savedKey = g_settings.getString(settingKey);
+            if (!savedKey.empty()) {
+                info.key = savedKey;
+            }
+            index++;
+        }
+    }
+    
+    ApplyHotkeys();
+}
+
+void HotkeyManager::LoadHotkeysFromNode(pugi::xml_node& node) {
+    // Process this node's items
+    for (pugi::xml_node item = node.child("item"); item; item = item.next_sibling("item")) {
+        std::string name = item.attribute("name").as_string();
+        std::string hotkey = item.attribute("hotkey").as_string();
+        std::string action = item.attribute("action").as_string();
+        std::string help = item.attribute("help").as_string();
+        
+        if (!action.empty() && !hotkey.empty()) {
+            OutputDebugStringA(wxString::Format("Loading hotkey: %s -> %s (%s)\n", 
+                action.c_str(), hotkey.c_str(), help.c_str()).c_str());
+            RegisterHotkey(action, hotkey, help, nullptr);
+        }
+    }
+
+    // Recursively process all menu nodes
+    for (pugi::xml_node menu = node.child("menu"); menu; menu = menu.next_sibling("menu")) {
+        std::string menuName = menu.attribute("name").as_string();
+        OutputDebugStringA(wxString::Format("Processing menu: %s\n", menuName.c_str()).c_str());
+        LoadHotkeysFromNode(menu);
+    }
+}
+
+void HotkeyManager::SaveHotkeys() {
+    size_t index = 0;
+    for (const auto& [name, info] : hotkeys) {
+        uint32_t settingKey = Config::HOTKEY_BASE + index;
+        g_settings.setString(settingKey, info.key);
+        index++;
+    }
+}
+
+bool IsValidModifier(const wxString& modifier) {
+    return modifier == "Ctrl" || modifier == "Alt" || modifier == "Shift";
+}
+
+bool IsValidKey(const wxString& key) {
+    // Single character A-Z
+    if (key.length() == 1 && key[0] >= 'A' && key[0] <= 'Z') {
+        return true;
+    }
+    
+    // Function keys F1-F12
+    if (key.StartsWith("F") && key.length() <= 3) {
+        long num;
+        wxString numStr = key.Mid(1);
+        if (numStr.ToLong(&num)) {
+            return num >= 1 && num <= 12;
+        }
+    }
+    
+    // Add other valid special keys as needed
+    static const wxString validSpecialKeys[] = {
+        "Space", "Tab", "Enter", "Esc",
+        "Left", "Right", "Up", "Down",
+        "Home", "End", "PgUp", "PgDn",
+        "Insert", "Delete", "Plus", "Minus"
+    };
+    
+    for (const auto& specialKey : validSpecialKeys) {
+        if (key == specialKey) return true;
+    }
+    
+    return false;
+}
+
+bool ValidateHotkeyString(const wxString& hotkey, wxString& error) {
+    if (hotkey.empty()) {
+        return true; // Empty hotkey is valid (removes hotkey)
+    }
+    
+    wxArrayString parts = wxSplit(hotkey, '+');
+    
+    // Check if last part is a valid key
+    if (parts.IsEmpty() || !IsValidKey(parts.Last())) {
+        error = "Invalid key. Must be A-Z, F1-F12, or a special key";
+        return false;
+    }
+    
+    // Check modifiers
+    for (size_t i = 0; i < parts.size() - 1; ++i) {
+        if (!IsValidModifier(parts[i].Trim())) {
+            error = "Invalid modifier. Must be Ctrl, Alt, or Shift";
+            return false;
+        }
+    }
+    
+    return true;
+}
+
+void HotkeyManager::ShowHotkeyDialog(wxWindow* parent) {
+    wxDialog* dialog = new wxDialog(parent, wxID_ANY, "Hotkey Configuration", 
+                                  wxDefaultPosition, wxSize(600, 500));
+    
+    wxBoxSizer* mainSizer = new wxBoxSizer(wxVERTICAL);
+    
+    // Create list control
+    wxListCtrl* hotkeyList = new wxListCtrl(dialog, wxID_ANY, wxDefaultPosition, 
+                                           wxDefaultSize, wxLC_REPORT | wxLC_SINGLE_SEL);
+    hotkeyList->InsertColumn(0, "Menu", wxLIST_FORMAT_LEFT, 150);
+    hotkeyList->InsertColumn(1, "Action", wxLIST_FORMAT_LEFT, 200);
+    hotkeyList->InsertColumn(2, "Hotkey", wxLIST_FORMAT_LEFT, 150);
+    
+    // Load directly from menubar.xml
+    wxString path = g_gui.GetDataDirectory() + "\\menubar.xml";
+    pugi::xml_document doc;
+    
+    if (doc.load_file(path.mb_str())) {
+        pugi::xml_node menubar = doc.child("menubar");
+        if (menubar) {
+            long idx = 0;
+            for (pugi::xml_node menu = menubar.child("menu"); menu; menu = menu.next_sibling("menu")) {
+                std::string menuName = menu.attribute("name").as_string();
+                
+                for (pugi::xml_node item = menu.child("item"); item; item = item.next_sibling("item")) {
+                    std::string hotkey = item.attribute("hotkey").as_string();
+                    std::string action = item.attribute("action").as_string();
+                    
+                    if (!action.empty()) {  // Show all actions, even without hotkeys
+                        hotkeyList->InsertItem(idx, wxString(menuName));
+                        hotkeyList->SetItem(idx, 1, wxString(action));
+                        hotkeyList->SetItem(idx, 2, wxString(hotkey));
+                        idx++;
+                    }
+                }
+            }
+        }
+    }
+
+    // Add edit box for hotkey input
+    wxBoxSizer* editSizer = new wxBoxSizer(wxHORIZONTAL);
+    wxStaticText* label = new wxStaticText(dialog, wxID_ANY, "Hotkey:");
+    wxTextCtrl* hotkeyEdit = new wxTextCtrl(dialog, wxID_ANY, "", wxDefaultPosition, wxSize(150, -1));
+    wxButton* setButton = new wxButton(dialog, wxID_ANY, "Set");
+    editSizer->Add(label, 0, wxALIGN_CENTER_VERTICAL | wxRIGHT, 5);
+    editSizer->Add(hotkeyEdit, 1, wxALIGN_CENTER_VERTICAL | wxRIGHT, 5);
+    editSizer->Add(setButton, 0);
+
+    // Handle list selection
+    hotkeyList->Bind(wxEVT_LIST_ITEM_SELECTED, [hotkeyList, hotkeyEdit](wxListEvent& event) {
+        wxListItem item;
+        item.SetId(event.GetIndex());
+        item.SetColumn(2);  // Hotkey column
+        item.SetMask(wxLIST_MASK_TEXT);
+        hotkeyList->GetItem(item);
+        hotkeyEdit->SetValue(item.GetText());
+    });
+
+    // Handle set button
+    setButton->Bind(wxEVT_BUTTON, [hotkeyList, hotkeyEdit, dialog](wxCommandEvent&) {
+        long item = hotkeyList->GetNextItem(-1, wxLIST_NEXT_ALL, wxLIST_STATE_SELECTED);
+        if (item != -1) {
+            wxString newHotkey = hotkeyEdit->GetValue();
+            wxString error;
+            
+            if (ValidateHotkeyString(newHotkey, error)) {
+                hotkeyList->SetItem(item, 2, newHotkey);
+            } else {
+                wxMessageBox(error, "Invalid Hotkey", 
+                           wxOK | wxICON_ERROR, dialog);
+            }
+        }
+    });
+
+    // Main dialog layout
+    mainSizer->Add(hotkeyList, 1, wxEXPAND | wxALL, 5);
+    mainSizer->Add(editSizer, 0, wxEXPAND | wxALL, 5);
+    
+    // Add OK/Cancel buttons
+    wxBoxSizer* buttonSizer = new wxBoxSizer(wxHORIZONTAL);
+    wxButton* saveButton = new wxButton(dialog, wxID_OK, "Save");
+    wxButton* cancelButton = new wxButton(dialog, wxID_CANCEL, "Cancel");
+    buttonSizer->Add(saveButton, 0, wxRIGHT, 5);
+    buttonSizer->Add(cancelButton);
+    mainSizer->Add(buttonSizer, 0, wxALIGN_RIGHT | wxALL, 5);
+    
+    dialog->SetSizer(mainSizer);
+    
+    if (dialog->ShowModal() == wxID_OK) {
+        bool hasChanges = false;
+        
+        // Save changes to settings
+        for (long item = 0; item < hotkeyList->GetItemCount(); ++item) {
+            wxListItem listItem;
+            listItem.SetId(item);
+            
+            // Get action
+            listItem.SetColumn(1);
+            listItem.SetMask(wxLIST_MASK_TEXT);
+            hotkeyList->GetItem(listItem);
+            std::string action = listItem.GetText().ToStdString();
+            
+            // Get hotkey
+            listItem.SetColumn(2);
+            hotkeyList->GetItem(listItem);
+            std::string newHotkey = listItem.GetText().ToStdString();
+            
+            if (!action.empty()) {
+                if (hotkeys[action].key != newHotkey) {
+                    hotkeys[action].key = newHotkey;
+                    hasChanges = true;
+                }
+            }
+        }
+        
+        if (hasChanges) {
+            SaveHotkeys();
+            
+            // Save to menubar.xml
+            wxString path = g_gui.GetDataDirectory() + "\\menubar.xml";
+            pugi::xml_document doc;
+            
+            if (doc.load_file(path.mb_str())) {
+                bool xmlModified = false;
+                
+                // Update hotkeys in XML
+                for (pugi::xml_node menu = doc.child("menubar").child("menu"); menu; 
+                     menu = menu.next_sibling("menu")) {
+                    for (pugi::xml_node item = menu.child("item"); item; 
+                         item = item.next_sibling("item")) {
+                        std::string action = item.attribute("action").as_string();
+                        if (!action.empty() && hotkeys.count(action) > 0) {
+                            pugi::xml_attribute hotkeyAttr = item.attribute("hotkey");
+                            if (hotkeyAttr && hotkeyAttr.as_string() != hotkeys[action].key) {
+                                hotkeyAttr.set_value(hotkeys[action].key.c_str());
+                                xmlModified = true;
+                            }
+                        }
+                    }
+                }
+                
+                if (xmlModified) {
+                    doc.save_file(path.mb_str());
+                }
+            }
+            
+            ApplyHotkeys();
+        }
+    }
+    
+    dialog->Destroy();
+}
+
+
+void HotkeyManager::ApplyHotkeys() {
+    // TODO: Implement hotkey application
+}
+
+std::map<std::string, HotkeyManager::HotkeyInfo> HotkeyManager::GetAllHotkeys() const {
+    return hotkeys;
+}
+
+wxString HotkeyManager::KeyCodeToString(int keyCode) {
+    // Convert wxWidgets key code to string representation
+    return wxAcceleratorEntry(wxACCEL_NORMAL, keyCode, 0).ToString();
+}
+
+int HotkeyManager::StringToKeyCode(const wxString& keyString) {
+    // Convert string representation to wxWidgets key code
+    wxAcceleratorEntry entry;
+    entry.FromString(keyString);
+    return entry.GetKeyCode();
+}
+
+// ... implement other methods ... 

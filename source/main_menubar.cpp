@@ -37,6 +37,7 @@
 #include "live_client.h"
 #include "live_server.h"
 #include "string_utils.h"
+#include "hotkey_manager.h"
 
 BEGIN_EVENT_TABLE(MainMenuBar, wxEvtHandler)
 END_EVENT_TABLE()
@@ -201,6 +202,7 @@ MainMenuBar::MainMenuBar(MainFrame* frame) :
 	MAKE_ACTION(EXTENSIONS, wxITEM_NORMAL, OnListExtensions);
 	MAKE_ACTION(GOTO_WEBSITE, wxITEM_NORMAL, OnGotoWebsite);
 	MAKE_ACTION(ABOUT, wxITEM_NORMAL, OnAbout);
+	MAKE_ACTION(SHOW_HOTKEYS, wxITEM_NORMAL, OnShowHotkeys); // Add this line
 
 
 	// A deleter, this way the frame does not need
@@ -2694,4 +2696,8 @@ void MainMenuBar::OnMapRemoveDuplicates(wxCommandEvent& WXUNUSED(event)) {
     });
 
     dialog.ShowModal();
+}
+
+void MainMenuBar::OnShowHotkeys(wxCommandEvent& WXUNUSED(event)) {
+    g_hotkey_manager.ShowHotkeyDialog(frame);
 }

@@ -476,6 +476,9 @@ protected:
 	friend class RenderingLock;
 	friend MapTab::MapTab(MapTabbook*, Editor*);
 	friend MapTab::MapTab(const MapTab*);
+
+public:
+	int GetHotkeyEventId(const std::string& action);
 };
 
 extern GUI g_gui;

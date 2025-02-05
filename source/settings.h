@@ -182,6 +182,14 @@ namespace Config {
 
 		LAST,
 	};
+
+	// Hotkey settings
+	const std::string HOTKEY_PREFIX = "hotkey.";
+
+	enum HotkeySettings : uint32_t {
+		HOTKEY_BASE = 1000, // Start at 1000 to avoid conflicts
+		// Add more specific hotkey settings as needed
+	};
 }
 
 class wxConfigBase;

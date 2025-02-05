@@ -2118,3 +2118,10 @@ void SetWindowToolTip(wxWindow* a, wxWindow* b, const wxString& tip) {
 	a->SetToolTip(tip);
 	b->SetToolTip(tip);
 }
+
+int GUI::GetHotkeyEventId(const std::string& action) {
+	// Convert action string to menu event ID
+	// This needs to be implemented based on your menu system
+	// Return -1 if no matching action is found
+	return -1; // Temporary return until implementation
+}

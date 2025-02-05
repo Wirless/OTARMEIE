@@ -386,6 +386,7 @@
       <Filter>gui\map window</Filter>
     </ClInclude>
     <ClInclude Include="..\..\source\string_utils.h" />
+    <ClInclude Include="..\..\source\hotkey_manager.h" />
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="..\..\source\json\json_spirit_reader.cpp">
@@ -682,6 +683,7 @@
       <Filter>gui\map window</Filter>
     </ClCompile>
     <ClCompile Include="..\..\source\string_utils.cpp" />
+    <ClCompile Include="..\..\source\hotkey_manager.cpp" />
   </ItemGroup>
   <ItemGroup>
     <ResourceCompile Include="Editor.rc">
