@@ -1,0 +1,3 @@
+replacement window alike input 
+insert doodads in selection
+find tiles with items that are not isBlocking e.g lonely ground fields without any other items and plant a doodads on them depending on the fill % option that will cover the empty tiles not all in one go 
