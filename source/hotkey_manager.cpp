@@ -6,6 +6,7 @@
 #include <wx/slider.h>
 #include <pugixml.hpp>
 #include <set>
+#include <algorithm>
 
 HotkeyManager g_hotkey_manager;
 
@@ -23,8 +24,11 @@ HotkeyManager::HotkeyManager() {
 
 void HotkeyManager::RegisterHotkey(const std::string& name, const std::string& defaultKey,
                                  const std::string& description, std::function<void()> callback) {
+    // Store the complete information
     hotkeys[name] = {defaultKey, description, callback};
-    printf("Registered hotkey: %s -> %s\n", name.c_str(), defaultKey.c_str());
+    
+    // No need to sort - map maintains order by key
+    // Priority handling is done during hotkey processing
 }
 
 void HotkeyManager::LoadHotkeys() {
@@ -280,19 +284,46 @@ void HotkeyManager::ShowHotkeyDialog(wxWindow* parent) {
     });
 
     // Handle set button
-    setButton->Bind(wxEVT_BUTTON, [hotkeyList, hotkeyEdit, dialog](wxCommandEvent&) {
-        long item = hotkeyList->GetNextItem(-1, wxLIST_NEXT_ALL, wxLIST_STATE_SELECTED);
-        if (item != -1) {
-            wxString newHotkey = hotkeyEdit->GetValue();
-            wxString error;
-            
-            if (ValidateHotkeyString(newHotkey, error)) {
-                hotkeyList->SetItem(item, 2, newHotkey);
-            } else {
-                wxMessageBox(error, "Invalid Hotkey", 
-                           wxOK | wxICON_ERROR, dialog);
+    setButton->Bind(wxEVT_BUTTON, [this, hotkeyList, hotkeyEdit, dialog](wxCommandEvent& event) {
+        wxString newHotkey = hotkeyEdit->GetValue();
+        wxString error;
+        
+        // Get the selected item's action
+        long selectedIndex = hotkeyList->GetNextItem(-1, wxLIST_NEXT_ALL, wxLIST_STATE_SELECTED);
+        if (selectedIndex == -1) {
+            wxMessageBox("Please select an action first", "Error", wxOK | wxICON_ERROR);
+            return;
+        }
+        
+        wxListItem item;
+        item.SetId(selectedIndex);
+        item.SetColumn(1);  // Action column
+        item.SetMask(wxLIST_MASK_TEXT);
+        hotkeyList->GetItem(item);
+        std::string action = item.GetText().ToStdString();
+        
+        // Validate the hotkey
+        if (!ValidateHotkeyString(newHotkey, error)) {
+            wxMessageBox(error, "Invalid Hotkey", wxOK | wxICON_ERROR);
+            return;
+        }
+        
+        // Check for duplicates
+        for (const auto& [existingAction, info] : hotkeys) {
+            if (existingAction != action && info.key == newHotkey.ToStdString()) {
+                wxMessageBox("This hotkey is already assigned to: " + wxString(existingAction), 
+                           "Duplicate Hotkey", wxOK | wxICON_ERROR);
+                return;
             }
         }
+        
+        // Update the hotkey
+        hotkeys[action].key = newHotkey.ToStdString();
+        hotkeyList->SetItem(selectedIndex, 2, newHotkey);
+        
+        // Save changes
+        SaveHotkeys();
+        ApplyHotkeys();
     });
 
     // Main dialog layout
@@ -385,37 +416,39 @@ void HotkeyManager::ApplyHotkeys() {
     
     if (doc.load_file(path.mb_str())) {
         bool xmlModified = false;
+        pugi::xml_node menubar = doc.child("menubar");
         
-        // Update hotkeys in XML
-        for (pugi::xml_node menu = doc.child("menubar").child("menu"); menu; 
-             menu = menu.next_sibling("menu")) {
-            for (pugi::xml_node item = menu.child("item"); item; 
-                 item = item.next_sibling("item")) {
-                std::string action = item.attribute("action").as_string();
-                if (!action.empty() && hotkeys.count(action) > 0) {
-                    pugi::xml_attribute hotkeyAttr = item.attribute("hotkey");
-                    if (hotkeyAttr) {
-                        if (hotkeyAttr.as_string() != hotkeys[action].key) {
-                            hotkeyAttr.set_value(hotkeys[action].key.c_str());
+        if (menubar) {
+            // Update hotkeys in XML
+            for (pugi::xml_node menu = menubar.child("menu"); menu; menu = menu.next_sibling("menu")) {
+                for (pugi::xml_node item = menu.child("item"); item; item = item.next_sibling("item")) {
+                    std::string action = item.attribute("action").as_string();
+                    if (!action.empty() && hotkeys.count(action) > 0) {
+                        pugi::xml_attribute hotkeyAttr = item.attribute("hotkey");
+                        if (hotkeyAttr) {
+                            if (hotkeyAttr.as_string() != hotkeys[action].key) {
+                                hotkeyAttr.set_value(hotkeys[action].key.c_str());
+                                xmlModified = true;
+                            }
+                        } else if (!hotkeys[action].key.empty()) {
+                            item.append_attribute("hotkey").set_value(hotkeys[action].key.c_str());
                             xmlModified = true;
                         }
-                    } else if (!hotkeys[action].key.empty()) {
-                        item.append_attribute("hotkey").set_value(hotkeys[action].key.c_str());
-                        xmlModified = true;
                     }
                 }
             }
+            
+            // Save XML if modified
+            if (xmlModified) {
+                doc.save_file(path.mb_str());
+                // Force reload of hotkeys
+                LoadHotkeys();
+                // Update GUI
+                if (g_gui.root) {
+                    g_gui.root->UpdateMenubar();
+                }
+            }
         }
-        
-        // Save XML if modified
-        if (xmlModified) {
-            doc.save_file(path.mb_str());
-        }
-    }
-    
-    // Force GUI refresh to update menus
-    if (g_gui.root) {
-        g_gui.root->UpdateMenubar();
     }
 }
 
