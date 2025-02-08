@@ -5,8 +5,16 @@
 #include <wx/listctrl.h>
 #include <wx/slider.h>
 #include <pugixml.hpp>
+#include <set>
 
 HotkeyManager g_hotkey_manager;
+
+wxString ModifierKeyToString(int keyCode) {
+    if (keyCode == WXK_SHIFT) return "Shift+";
+    if (keyCode == WXK_CONTROL) return "Ctrl+";
+    if (keyCode == WXK_ALT) return "Alt+";
+    return "";
+}
 
 HotkeyManager::HotkeyManager() {
     // Constructor is called before g_settings is initialized
@@ -189,7 +197,73 @@ void HotkeyManager::ShowHotkeyDialog(wxWindow* parent) {
     // Add edit box for hotkey input
     wxBoxSizer* editSizer = new wxBoxSizer(wxHORIZONTAL);
     wxStaticText* label = new wxStaticText(dialog, wxID_ANY, "Hotkey:");
-    wxTextCtrl* hotkeyEdit = new wxTextCtrl(dialog, wxID_ANY, "", wxDefaultPosition, wxSize(150, -1));
+    wxTextCtrl* hotkeyEdit = new wxTextCtrl(dialog, wxID_ANY, "", 
+        wxDefaultPosition, wxSize(150, -1), wxTE_PROCESS_ENTER | wxTE_PROCESS_TAB);
+
+    // Make the text control read-only to prevent direct typing
+    hotkeyEdit->SetEditable(false);
+
+    // Add key event handling
+    hotkeyEdit->Bind(wxEVT_KEY_DOWN, [this, hotkeyEdit](wxKeyEvent& event) {
+        int keyCode = event.GetKeyCode();
+        
+        // Handle modifier keys
+        if (keyCode == WXK_SHIFT || keyCode == WXK_CONTROL || keyCode == WXK_ALT) {
+            currentModifiers.insert(keyCode);
+            UpdateHotkeyString(hotkeyEdit);
+            return;
+        }
+        
+        // Handle regular keys only if they're valid
+        if ((keyCode >= 'A' && keyCode <= 'Z') || 
+            (keyCode >= '0' && keyCode <= '9') ||
+            (keyCode >= WXK_F1 && keyCode <= WXK_F12)) {
+            
+            // Convert to uppercase if it's a letter
+            if (keyCode >= 'a' && keyCode <= 'z') {
+                keyCode = keyCode - 'a' + 'A';
+            }
+            
+            wxString finalKey;
+            if (keyCode >= WXK_F1 && keyCode <= WXK_F12) {
+                int fKeyNum = keyCode - WXK_F1 + 1;
+                finalKey = wxString::Format("F%d", fKeyNum);
+            } else {
+                finalKey = wxString(static_cast<wxChar>(keyCode));
+            }
+            
+            // Build the complete hotkey string
+            wxString hotkeyStr;
+            if (currentModifiers.count(WXK_CONTROL)) hotkeyStr += "Ctrl+";
+            if (currentModifiers.count(WXK_SHIFT)) hotkeyStr += "Shift+";
+            if (currentModifiers.count(WXK_ALT)) hotkeyStr += "Alt+";
+            hotkeyStr += finalKey;
+            
+            hotkeyEdit->SetValue(hotkeyStr);
+            currentModifiers.clear();
+            event.Skip(false);
+            return;
+        }
+        
+        // Block all other keys except backspace
+        if (keyCode != WXK_BACK) {
+            event.Skip(false);
+        }
+    });
+
+    hotkeyEdit->Bind(wxEVT_KEY_UP, [this, hotkeyEdit](wxKeyEvent& event) {
+        int keyCode = event.GetKeyCode();
+        
+        if (keyCode == WXK_BACK) {
+            hotkeyEdit->SetValue("");
+            currentModifiers.clear();
+        } else if (keyCode == WXK_SHIFT || keyCode == WXK_CONTROL || keyCode == WXK_ALT) {
+            currentModifiers.erase(keyCode);
+            UpdateHotkeyString(hotkeyEdit);
+        }
+        event.Skip();
+    });
+
     wxButton* setButton = new wxButton(dialog, wxID_ANY, "Set");
     editSizer->Add(label, 0, wxALIGN_CENTER_VERTICAL | wxRIGHT, 5);
     editSizer->Add(hotkeyEdit, 1, wxALIGN_CENTER_VERTICAL | wxRIGHT, 5);
@@ -359,6 +433,14 @@ int HotkeyManager::StringToKeyCode(const wxString& keyString) {
     wxAcceleratorEntry entry;
     entry.FromString(keyString);
     return entry.GetKeyCode();
+}
+
+void HotkeyManager::UpdateHotkeyString(wxTextCtrl* hotkeyEdit) {
+    wxString hotkeyStr;
+    if (currentModifiers.count(WXK_CONTROL)) hotkeyStr += "Ctrl+";
+    if (currentModifiers.count(WXK_SHIFT)) hotkeyStr += "Shift+";
+    if (currentModifiers.count(WXK_ALT)) hotkeyStr += "Alt+";
+    hotkeyEdit->SetValue(hotkeyStr);
 }
 
 // ... implement other methods ... 

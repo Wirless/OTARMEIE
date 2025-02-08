@@ -6,6 +6,7 @@
 #include <functional>
 #include <wx/accel.h>
 #include <pugixml.hpp>
+#include <set>
 
 class HotkeyManager {
 public:
@@ -29,8 +30,10 @@ public:
 
 private:
     std::map<std::string, HotkeyInfo> hotkeys;
+    std::set<int> currentModifiers;
     void ApplyHotkeys();
     void LoadHotkeysFromNode(pugi::xml_node& node);
+    void UpdateHotkeyString(wxTextCtrl* hotkeyEdit);
     
     // Helper methods for hotkey dialog
     void UpdateHotkeyList();
