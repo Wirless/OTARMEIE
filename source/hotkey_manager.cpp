@@ -8,6 +8,61 @@
 #include <set>
 #include <algorithm>
 
+/*
+Task: Fix Hotkey Manager Update Issue
+
+Current Behavior:
+- Hotkeys are saved to menubar.xml successfully
+- Changes appear in the XML file
+- Old hotkeys remain active in the current session
+- ApplyHotkeys() creates a save/load loop
+- Multiple saves occur during a single update
+
+Expected Behavior:
+- Hotkeys should be saved to menubar.xml
+- New hotkeys should become active immediately
+- Old hotkeys should be deactivated
+- Single save operation per update
+- Clean reload of hotkey configuration
+
+Affected Files:
+1. source/hotkey_manager.cpp
+   - ShowHotkeyDialog() [lines: 163-406]
+   - ApplyHotkeys() [lines: 409-453]
+   - LoadHotkeys() [lines: 34-70]
+
+2. source/main_menubar.cpp
+   - Update() [lines: 468-478]
+   - MainMenuBar class implementation
+
+3. source/application.cpp
+   - MainFrame::UpdateMenubar() [lines: 455-458]
+   - MSWTranslateMessage() [lines: 441-452]
+
+4. source/hotkey_manager.h
+   - HotkeyManager class definition [lines: 11-41]
+
+Key Functions to Modify:
+1. HotkeyManager::ApplyHotkeys()
+   - Remove redundant save operations
+   - Implement clean reload mechanism
+   - Update UI without triggering loops
+
+2. HotkeyManager::LoadHotkeys()
+   - Ensure proper loading from XML
+   - Maintain callbacks during reload
+
+3. MainFrame::UpdateMenubar()
+   - Ensure proper UI update after hotkey changes
+
+Dependencies:
+- wxWidgets menu system
+- pugixml for XML handling
+- Settings management system
+- GUI update mechanisms
+*/
+
+
 HotkeyManager g_hotkey_manager;
 
 wxString ModifierKeyToString(int keyCode) {
