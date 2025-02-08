@@ -157,6 +157,13 @@ private:
 	// Add new range input control
 	wxTextCtrl* replace_range_input;
 
+	// Add after preset_choice declaration
+	wxChoice* border_from_choice;
+	wxChoice* border_to_choice;
+
+	// Add to private members section around line 150
+	wxButton* add_border_button;
+
 	void OnPresetSelect(wxCommandEvent& event);
 	void OnAddPreset(wxCommandEvent& event);
 	void OnRemovePreset(wxCommandEvent& event);
@@ -165,6 +172,10 @@ private:
 	void LoadPresetFromXML(const wxString& name);
 	void RefreshPresetList();
 
+	void LoadBorderChoices();
+	void OnAddBorderItems(wxCommandEvent& event);
+	void OnBorderFromSelect(wxCommandEvent& event) { /* Optional implementation */ }
+	void OnBorderToSelect(wxCommandEvent& event) { /* Optional implementation */ }
 
 	static const int ID_SAVE_PRESET = 1001;
 	static const int ID_LOAD_PRESET = 1002;

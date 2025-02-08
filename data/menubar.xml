@@ -119,6 +119,7 @@
 		<item name="Replace Items on Selection" action="REPLACE_ON_SELECTION_ITEMS" help="Replace items on selected area."/>
 		<item name="Find Item on Selection" action="SEARCH_ON_SELECTION_ITEM" help="Find items on selected area."/>
 		<item name="Remove Item on Selection" action="REMOVE_ON_SELECTION_ITEM" help="Remove item on selected area."/>
+		<item name="Replace Borders..." action="REPLACE_BORDERS" help="Replace border patterns in selected area."/>
 		<separator/>
 		<menu name="Find on Selection">
 			<item name="Find Everything" action="SEARCH_ON_SELECTION_EVERYTHING" help="Find all unique/action/text/container items."/>

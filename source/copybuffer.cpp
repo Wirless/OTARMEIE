@@ -21,6 +21,7 @@
 #include "editor.h"
 #include "gui.h"
 #include "creature.h"
+#include "minimap_window.h"
 
 CopyBuffer::CopyBuffer() :
 	tiles(newd BaseMap()) {
@@ -216,12 +217,30 @@ void CopyBuffer::paste(Editor& editor, const Position& toPosition) {
 
 	BatchAction* batchAction = editor.actionQueue->createBatch(ACTION_PASTE_TILES);
 	Action* action = editor.actionQueue->createAction(batchAction);
+	
+	// Track modified positions for minimap update
+	PositionVector modifiedPositions;
+	
+	// Original paste logic
 	for (MapIterator it = tiles->begin(); it != tiles->end(); ++it) {
 		Tile* buffer_tile = (*it)->get();
 		Position pos = buffer_tile->getPosition() - copyPos + toPosition;
-
+		
 		if (!pos.isValid()) {
 			continue;
+		}
+		
+		// Add position for minimap update
+		modifiedPositions.push_back(pos);
+		
+		// Add surrounding positions for border updates
+		for(int dx = -1; dx <= 1; dx++) {
+			for(int dy = -1; dy <= 1; dy++) {
+				Position borderPos(pos.x + dx, pos.y + dy, pos.z);
+				if(borderPos.isValid()) {
+					modifiedPositions.push_back(borderPos);
+				}
+			}
 		}
 
 		TileLocation* location = editor.map.createTileL(pos);
@@ -239,22 +258,12 @@ void CopyBuffer::paste(Editor& editor, const Position& toPosition) {
 			new_dest_tile->merge(copy_tile);
 			delete copy_tile;
 		} else {
-			// If the copied tile has ground, replace target tile
 			new_dest_tile = copy_tile;
 		}
 
-		// Add all surrounding tiles to the map, so they get borders
-		editor.map.createTile(pos.x - 1, pos.y - 1, pos.z);
-		editor.map.createTile(pos.x, pos.y - 1, pos.z);
-		editor.map.createTile(pos.x + 1, pos.y - 1, pos.z);
-		editor.map.createTile(pos.x - 1, pos.y, pos.z);
-		editor.map.createTile(pos.x + 1, pos.y, pos.z);
-		editor.map.createTile(pos.x - 1, pos.y + 1, pos.z);
-		editor.map.createTile(pos.x, pos.y + 1, pos.z);
-		editor.map.createTile(pos.x + 1, pos.y + 1, pos.z);
-
 		action->addChange(newd Change(new_dest_tile));
 	}
+	
 	batchAction->addAndCommitAction(action);
 
 	if (g_settings.getInteger(Config::USE_AUTOMAGIC) && g_settings.getInteger(Config::BORDERIZE_PASTE)) {
@@ -262,59 +271,13 @@ void CopyBuffer::paste(Editor& editor, const Position& toPosition) {
 		TileList borderize_tiles;
 		Map& map = editor.map;
 
-		// Go through all modified (selected) tiles (might be slow)
-		for (MapIterator it = tiles->begin(); it != tiles->end(); ++it) {
-			bool add_me = false; // If this tile is touched
-			Position pos = (*it)->getPosition() - copyPos + toPosition;
-			if (pos.z < 0 || pos.z >= MAP_LAYERS) {
-				continue;
-			}
-			// Go through all neighbours
-			Tile* t;
-			t = map.getTile(pos.x - 1, pos.y - 1, pos.z);
-			if (t && !t->isSelected()) {
-				borderize_tiles.push_back(t);
-				add_me = true;
-			}
-			t = map.getTile(pos.x, pos.y - 1, pos.z);
-			if (t && !t->isSelected()) {
-				borderize_tiles.push_back(t);
-				add_me = true;
-			}
-			t = map.getTile(pos.x + 1, pos.y - 1, pos.z);
-			if (t && !t->isSelected()) {
-				borderize_tiles.push_back(t);
-				add_me = true;
-			}
-			t = map.getTile(pos.x - 1, pos.y, pos.z);
-			if (t && !t->isSelected()) {
-				borderize_tiles.push_back(t);
-				add_me = true;
-			}
-			t = map.getTile(pos.x + 1, pos.y, pos.z);
-			if (t && !t->isSelected()) {
-				borderize_tiles.push_back(t);
-				add_me = true;
-			}
-			t = map.getTile(pos.x - 1, pos.y + 1, pos.z);
-			if (t && !t->isSelected()) {
-				borderize_tiles.push_back(t);
-				add_me = true;
-			}
-			t = map.getTile(pos.x, pos.y + 1, pos.z);
-			if (t && !t->isSelected()) {
-				borderize_tiles.push_back(t);
-				add_me = true;
-			}
-			t = map.getTile(pos.x + 1, pos.y + 1, pos.z);
-			if (t && !t->isSelected()) {
-				borderize_tiles.push_back(t);
-				add_me = true;
-			}
-			if (add_me) {
-				borderize_tiles.push_back(map.getTile(pos));
+		for (const Position& pos : modifiedPositions) {
+			Tile* tile = map.getTile(pos);
+			if (tile) {
+				borderize_tiles.push_back(tile);
 			}
 		}
+
 		// Remove duplicates
 		borderize_tiles.sort();
 		borderize_tiles.unique();
@@ -323,21 +286,20 @@ void CopyBuffer::paste(Editor& editor, const Position& toPosition) {
 			if (tile) {
 				Tile* newTile = tile->deepCopy(editor.map);
 				newTile->borderize(&map);
-
-				if (tile->ground && tile->ground->isSelected()) {
-					newTile->selectGround();
-				}
-
 				newTile->wallize(&map);
 				action->addChange(newd Change(newTile));
 			}
 		}
 
-		// Commit changes to map
 		batchAction->addAndCommitAction(action);
 	}
 
 	editor.addBatch(batchAction);
+
+	// Update minimap with modified positions
+	if (g_gui.minimap) {
+		g_gui.minimap->UpdateDrawnTiles(modifiedPositions);
+	}
 }
 
 bool CopyBuffer::canPaste() const {

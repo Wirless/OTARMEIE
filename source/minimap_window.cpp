@@ -14,7 +14,43 @@
 // You should have received a copy of the GNU General Public License
 // along with this program. If not, see <http://www.gnu.org/licenses/>.
 //////////////////////////////////////////////////////////////////////
+/*
+CURRENT SITUATION:
+1. Minimap refresh issues:
+   - Updates when changing floors (minimap_window.cpp:93-101)
+   - Does not update properly after paste operations (copybuffer.cpp:232-257)
+   - No caching mechanism for faster reloading
+   - No binary file storage for minimap data
 
+IMPROVEMENT TASKS:
+1. Paste Operation Minimap Update:
+   - Add minimap update calls in copybuffer.cpp after paste operations
+   - Track modified positions during paste for efficient updates
+   - Reference: copybuffer.cpp:232-257
+
+2. Minimap Caching:
+   - Implement block-based caching system (already started in MinimapBlock struct)
+   - Add floor-specific caching
+   - Optimize block size for better performance (currently 256)
+   - Reference: minimap_window.cpp:53-55
+
+3. Binary File Storage:
+   - Create binary file format for minimap data
+   - Store color information and floor data
+   - Implement save/load functions
+   - Cache binary data for quick loading
+
+4. Drawing Optimization:
+   - Batch rendering operations
+   - Implement dirty region tracking
+   - Use hardware acceleration where possible
+   - Reference: minimap_window.cpp:290-339
+
+RELEVANT CODE SECTIONS:
+- Minimap window core: minimap_window.cpp:82-177
+- Copy buffer paste: copybuffer.cpp:232-257
+- Selection handling: selection.cpp:1-365
+*/
 #include "main.h"
 
 #include "graphics.h"

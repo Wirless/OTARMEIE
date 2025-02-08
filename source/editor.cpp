@@ -15,6 +15,7 @@
 // along with this program. If not, see <http://www.gnu.org/licenses/>.
 //////////////////////////////////////////////////////////////////////
 
+
 #include "main.h"
 
 #include "editor.h"
@@ -2026,5 +2027,30 @@ void Editor::QueryNode(int ndx, int ndy, bool underground) {
 void Editor::SendNodeRequests() {
 	if (live_client) {
 		live_client->sendNodeRequests();
+	}
+}
+
+// Add new helper method to update minimap for a single position
+void Editor::updateMinimap(const Position& pos) {
+	if (g_gui.minimap) {
+		PositionVector positions;
+		positions.push_back(pos);
+		g_gui.minimap->UpdateDrawnTiles(positions);
+	}
+}
+
+// Add new helper method to update minimap for multiple positions
+void Editor::updateMinimap(const PositionVector& positions) {
+	if (g_gui.minimap && !positions.empty()) {
+		g_gui.minimap->UpdateDrawnTiles(positions);
+	}
+}
+
+// Add new helper method to update minimap for a tile
+void Editor::updateMinimapTile(Tile* tile) {
+	if (g_gui.minimap && tile) {
+		PositionVector positions;
+		positions.push_back(tile->getPosition());
+		g_gui.minimap->UpdateDrawnTiles(positions);
 	}
 }

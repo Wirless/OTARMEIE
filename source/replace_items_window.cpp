@@ -208,7 +208,7 @@ void ReplaceItemsListBox::Clear() {
 
 ReplaceItemsDialog::ReplaceItemsDialog(wxWindow* parent, bool selectionOnly) :
 	wxDialog(parent, wxID_ANY, (selectionOnly ? "Replace Items on Selection" : "Replace Items"), 
-		wxDefaultPosition, wxSize(500, 580), wxDEFAULT_DIALOG_STYLE),
+		wxDefaultPosition, wxSize(500, 800), wxDEFAULT_DIALOG_STYLE),
 	selectionOnly(selectionOnly) {
 	SetSizeHints(wxDefaultSize, wxDefaultSize);
 
@@ -255,6 +255,30 @@ ReplaceItemsDialog::ReplaceItemsDialog(wxWindow* parent, bool selectionOnly) :
 	items_sizer->Add(progress, 0, wxALL, 5);
 
 	sizer->Add(items_sizer, 1, wxALL | wxEXPAND, 5);
+
+	// Add border controls after preset controls
+	wxBoxSizer* border_sizer = new wxBoxSizer(wxVERTICAL);
+	
+	// Add border label
+	wxStaticText* border_label = new wxStaticText(this, wxID_ANY, "Replace Borders:");
+	border_sizer->Add(border_label, 0, wxALL | wxALIGN_LEFT, 5);
+	
+	// Create horizontal sizer for border selection
+	wxBoxSizer* border_selection_sizer = new wxBoxSizer(wxHORIZONTAL);
+	
+	border_from_choice = new wxChoice(this, wxID_ANY, wxDefaultPosition, wxSize(200, 30));
+	border_to_choice = new wxChoice(this, wxID_ANY, wxDefaultPosition, wxSize(200, 30));
+	
+	border_selection_sizer->Add(border_from_choice, 0, wxALL | wxALIGN_CENTER_VERTICAL, 5);
+	border_selection_sizer->Add(border_to_choice, 0, wxALL | wxALIGN_CENTER_VERTICAL, 5);
+	
+	border_sizer->Add(border_selection_sizer, 0, wxALL | wxCENTER, 5);
+	
+	// Add border replace button in its own row
+	add_border_button = new wxButton(this, wxID_ANY, "Add Border Items", wxDefaultPosition, wxSize(150, 30));
+	border_sizer->Add(add_border_button, 0, wxALL | wxCENTER, 5);
+	
+	sizer->Add(border_sizer, 0, wxALL | wxCENTER, 5);
 
 	// Create main buttons row (Add, Remove, Execute, Close)
 	wxBoxSizer* buttons_sizer = new wxBoxSizer(wxHORIZONTAL);
@@ -333,9 +357,15 @@ ReplaceItemsDialog::ReplaceItemsDialog(wxWindow* parent, bool selectionOnly) :
 	remove_preset_button->Connect(wxEVT_BUTTON, wxCommandEventHandler(ReplaceItemsDialog::OnRemovePreset), NULL, this);
 	load_preset_button->Connect(wxEVT_BUTTON, wxCommandEventHandler(ReplaceItemsDialog::OnLoadPreset), NULL, this);
 	swap_checkbox->Connect(wxEVT_CHECKBOX, wxCommandEventHandler(ReplaceItemsDialog::OnSwapCheckboxClicked), NULL, this);
+	border_from_choice->Connect(wxEVT_CHOICE, wxCommandEventHandler(ReplaceItemsDialog::OnBorderFromSelect), NULL, this);
+	border_to_choice->Connect(wxEVT_CHOICE, wxCommandEventHandler(ReplaceItemsDialog::OnBorderToSelect), NULL, this);
+	add_border_button->Connect(wxEVT_BUTTON, wxCommandEventHandler(ReplaceItemsDialog::OnAddBorderItems), NULL, this);
 
 	// Load initial preset list
 	RefreshPresetList();
+
+	// Load initial border lists
+	LoadBorderChoices();
 }
 
 ReplaceItemsDialog::~ReplaceItemsDialog() {
@@ -352,6 +382,9 @@ ReplaceItemsDialog::~ReplaceItemsDialog() {
 	remove_preset_button->Disconnect(wxEVT_BUTTON, wxCommandEventHandler(ReplaceItemsDialog::OnRemovePreset), NULL, this);
 	load_preset_button->Disconnect(wxEVT_BUTTON, wxCommandEventHandler(ReplaceItemsDialog::OnLoadPreset), NULL, this);
 	swap_checkbox->Disconnect(wxEVT_CHECKBOX, wxCommandEventHandler(ReplaceItemsDialog::OnSwapCheckboxClicked), NULL, this);
+	border_from_choice->Disconnect(wxEVT_CHOICE, wxCommandEventHandler(ReplaceItemsDialog::OnBorderFromSelect), NULL, this);
+	border_to_choice->Disconnect(wxEVT_CHOICE, wxCommandEventHandler(ReplaceItemsDialog::OnBorderToSelect), NULL, this);
+	add_border_button->Disconnect(wxEVT_BUTTON, wxCommandEventHandler(ReplaceItemsDialog::OnAddBorderItems), NULL, this);
 }
 
 void ReplaceItemsDialog::UpdateWidgets() {
@@ -747,4 +780,150 @@ uint16_t ReplaceItemsDialog::getActualItemIdFromBrush(const Brush* brush) const 
 	}
 
 	return id;
+}
+
+void ReplaceItemsDialog::LoadBorderChoices() {
+	// Clear existing choices
+	border_from_choice->Clear();
+	border_to_choice->Clear();
+	
+	// Get version string and convert to directory format
+	std::string versionStr = g_gui.GetCurrentVersion().getName();
+	wxString formattedVersion;
+	
+	// Parse version string (e.g., "7.60" -> "760")
+	wxString versionWx(versionStr);
+	versionWx.Replace(".", ""); // Remove dots
+	
+	OutputDebugStringA(wxString::Format("Original version string: %s\n", versionStr).c_str());
+	OutputDebugStringA(wxString::Format("Formatted version: %s\n", versionWx).c_str());
+	
+	wxString bordersPath = g_gui.GetDataDirectory() + "/" + versionWx + "/borders.xml";
+	
+	OutputDebugStringA(wxString::Format("Attempting to load borders from: %s\n", bordersPath).c_str());
+	
+	// Add default text to choices
+	border_from_choice->Append("Select border to replace...");
+	border_to_choice->Append("Select border to replace with...");
+	border_from_choice->SetSelection(0);
+	border_to_choice->SetSelection(0);
+	
+	pugi::xml_document doc;
+	pugi::xml_parse_result result = doc.load_file(bordersPath.mb_str());
+	
+	if(result) {
+		OutputDebugStringA("Successfully opened borders.xml\n");
+		for(pugi::xml_node borderNode = doc.child("materials").child("border"); borderNode; borderNode = borderNode.next_sibling("border")) {
+			int borderId = borderNode.attribute("id").as_int();
+			wxString comment;
+			
+			// Count border items
+			int itemCount = 0;
+			for(pugi::xml_node itemNode = borderNode.child("borderitem"); itemNode; itemNode = itemNode.next_sibling("borderitem")) {
+				itemCount++;
+			}
+			
+			// Try to extract comment
+			for(pugi::xml_node node = borderNode.next_sibling(); node; node = node.next_sibling()) {
+				if(node.type() == pugi::node_comment) {
+					comment = wxString(node.value()).Trim();
+					break;
+				}
+			}
+			
+			wxString displayText;
+			if(!comment.IsEmpty()) {
+				displayText = wxString::Format("Border %d [%d] (%s)", borderId, itemCount, comment);
+			} else {
+				displayText = wxString::Format("Border %d [%d]", borderId, itemCount);
+			}
+			
+			border_from_choice->Append(displayText);
+			border_to_choice->Append(displayText);
+			
+			OutputDebugStringA(wxString::Format("Added border ID %d with %d items %s\n", 
+				borderId,
+				itemCount,
+				comment.IsEmpty() ? "" : wxString::Format("(%s)", comment).c_str()
+			).c_str());
+		}
+	} else {
+		OutputDebugStringA(wxString::Format("Failed to load borders.xml: %s\n", result.description()).c_str());
+		OutputDebugStringA(wxString::Format("Error at offset: %zu\n", result.offset).c_str());
+		
+		// Check file access
+		if(wxFileExists(bordersPath)) {
+			OutputDebugStringA("File exists but could not be loaded - possible permission or format issue\n");
+		} else {
+			OutputDebugStringA("File does not exist!\n");
+		}
+	}
+}
+
+void ReplaceItemsDialog::OnAddBorderItems(wxCommandEvent& WXUNUSED(event)) {
+	int fromIdx = border_from_choice->GetSelection();
+	int toIdx = border_to_choice->GetSelection();
+	
+	OutputDebugStringA(wxString::Format("OnAddBorderItems - From: %d, To: %d\n", fromIdx, toIdx).c_str());
+	
+	if(fromIdx <= 0 || toIdx <= 0) { // Account for the "Select border..." entry
+		wxMessageBox("Please select both border types!", "Error", wxOK | wxICON_ERROR);
+		return;
+	}
+
+	// Adjust indices to account for the "Select border..." entry
+	fromIdx--;
+	toIdx--;
+
+	// Get border IDs from the actual XML file
+	wxString versionStr(g_gui.GetCurrentVersion().getName());
+	versionStr.Replace(".", "");
+	wxString bordersPath = g_gui.GetDataDirectory() + "/" + versionStr + "/borders.xml";
+	
+	OutputDebugStringA(wxString::Format("Loading borders from: %s\n", bordersPath).c_str());
+	
+	pugi::xml_document doc;
+	if(doc.load_file(bordersPath.mb_str())) {
+		std::map<std::string, uint16_t> fromItems;
+		std::map<std::string, uint16_t> toItems;
+		
+		int currentBorder = 0;
+		for(pugi::xml_node borderNode = doc.child("materials").child("border"); borderNode; borderNode = borderNode.next_sibling("border")) {
+			if(currentBorder == fromIdx || currentBorder == toIdx) {
+				for(pugi::xml_node itemNode = borderNode.child("borderitem"); itemNode; itemNode = itemNode.next_sibling("borderitem")) {
+					std::string edge = itemNode.attribute("edge").value();
+					uint16_t itemId = itemNode.attribute("item").as_uint();
+					
+					if(currentBorder == fromIdx) {
+						fromItems[edge] = itemId;
+						OutputDebugStringA(wxString::Format("From Border - Edge: %s, Item: %d\n", edge, itemId).c_str());
+					} else {
+						toItems[edge] = itemId;
+						OutputDebugStringA(wxString::Format("To Border - Edge: %s, Item: %d\n", edge, itemId).c_str());
+					}
+				}
+			}
+			currentBorder++;
+		}
+		
+		// Add items to the replace list
+		for(const auto& pair : fromItems) {
+			if(toItems.count(pair.first)) {
+				ReplacingItem item;
+				item.replaceId = pair.second;
+				item.withId = toItems[pair.first];
+				item.complete = false;
+				item.total = 0;
+				
+				OutputDebugStringA(wxString::Format("Adding replacement: %d -> %d\n", item.replaceId, item.withId).c_str());
+				list->AddItem(item);
+			}
+		}
+		
+		UpdateWidgets();
+		list->Refresh();
+	} else {
+		OutputDebugStringA("Failed to load borders.xml\n");
+		wxMessageBox("Failed to load borders configuration!", "Error", wxOK | wxICON_ERROR);
+	}
 }

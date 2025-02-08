@@ -25,6 +25,7 @@
 
 #include "action.h"
 #include "selection.h"
+#include "minimap_window.h"
 
 class BaseMap;
 class CopyBuffer;
@@ -97,6 +98,7 @@ public: // Functions
 	void addBatch(BatchAction* action, int stacking_delay = 0);
 	void addAction(Action* action, int stacking_delay = 0);
 
+
 	// Selection
 	bool hasSelection() const {
 		return selection.size() != 0;
@@ -127,6 +129,11 @@ public: // Functions
 	void draw(const PositionVector& todraw, PositionVector& toborder, bool alt);
 	void undraw(const PositionVector& posvec, bool alt);
 	void undraw(const PositionVector& todraw, PositionVector& toborder, bool alt);
+
+	// Minimap update helpers
+	void updateMinimap(const Position& pos);
+	void updateMinimap(const PositionVector& positions);
+	void updateMinimapTile(Tile* tile);
 
 protected:
 	void drawInternal(const Position offset, bool alt, bool dodraw);

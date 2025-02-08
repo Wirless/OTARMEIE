@@ -46,6 +46,7 @@ public:
 	BaseMap& getBufferMap();
 
 private:
+	void collectModifiedPositions(const Position& toPosition, PositionVector& positions);
 	Position copyPos;
 	BaseMap* tiles;
 };
