@@ -302,7 +302,47 @@ void HotkeyManager::ShowHotkeyDialog(wxWindow* parent) {
 
 
 void HotkeyManager::ApplyHotkeys() {
-    // TODO: Implement hotkey application
+    // First save to settings
+    SaveHotkeys();
+    
+    // Then save to menubar.xml
+    wxString path = g_gui.GetDataDirectory() + "\\menubar.xml";
+    pugi::xml_document doc;
+    
+    if (doc.load_file(path.mb_str())) {
+        bool xmlModified = false;
+        
+        // Update hotkeys in XML
+        for (pugi::xml_node menu = doc.child("menubar").child("menu"); menu; 
+             menu = menu.next_sibling("menu")) {
+            for (pugi::xml_node item = menu.child("item"); item; 
+                 item = item.next_sibling("item")) {
+                std::string action = item.attribute("action").as_string();
+                if (!action.empty() && hotkeys.count(action) > 0) {
+                    pugi::xml_attribute hotkeyAttr = item.attribute("hotkey");
+                    if (hotkeyAttr) {
+                        if (hotkeyAttr.as_string() != hotkeys[action].key) {
+                            hotkeyAttr.set_value(hotkeys[action].key.c_str());
+                            xmlModified = true;
+                        }
+                    } else if (!hotkeys[action].key.empty()) {
+                        item.append_attribute("hotkey").set_value(hotkeys[action].key.c_str());
+                        xmlModified = true;
+                    }
+                }
+            }
+        }
+        
+        // Save XML if modified
+        if (xmlModified) {
+            doc.save_file(path.mb_str());
+        }
+    }
+    
+    // Force GUI refresh to update menus
+    if (g_gui.root) {
+        g_gui.root->UpdateMenubar();
+    }
 }
 
 std::map<std::string, HotkeyManager::HotkeyInfo> HotkeyManager::GetAllHotkeys() const {
