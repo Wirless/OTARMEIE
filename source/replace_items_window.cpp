@@ -366,6 +366,10 @@ ReplaceItemsDialog::ReplaceItemsDialog(wxWindow* parent, bool selectionOnly) :
 
 	// Load initial border lists
 	LoadBorderChoices();
+
+	// Add these lines after creating the border choice controls
+	border_from_choice->Bind(wxEVT_CHOICE, &ReplaceItemsDialog::OnBorderFromSelect, this);
+	border_to_choice->Bind(wxEVT_CHOICE, &ReplaceItemsDialog::OnBorderToSelect, this);
 }
 
 ReplaceItemsDialog::~ReplaceItemsDialog() {
@@ -783,79 +787,63 @@ uint16_t ReplaceItemsDialog::getActualItemIdFromBrush(const Brush* brush) const 
 }
 
 void ReplaceItemsDialog::LoadBorderChoices() {
-	// Clear existing choices
 	border_from_choice->Clear();
 	border_to_choice->Clear();
 	
-	// Get version string and convert to directory format
-	std::string versionStr = g_gui.GetCurrentVersion().getName();
-	wxString formattedVersion;
+	// Load grounds.xml first to get border names
+	wxString dataDir = GetDataDirectoryForVersion(g_gui.GetCurrentVersion().getName());
+	if(dataDir.IsEmpty()) return;
 	
-	// Parse version string (e.g., "7.60" -> "760")
-	wxString versionWx(versionStr);
-	versionWx.Replace(".", ""); // Remove dots
+	std::map<int, wxString> borderNames;
+	wxString groundsPath = g_gui.GetDataDirectory() + "/" + dataDir + "/grounds.xml";
+	pugi::xml_document groundsDoc;
+	if(groundsDoc.load_file(groundsPath.mb_str())) {
+		for(pugi::xml_node brushNode = groundsDoc.child("materials").child("brush"); 
+			brushNode; brushNode = brushNode.next_sibling("brush")) {
+			
+			for(pugi::xml_node borderNode = brushNode.child("border"); 
+				borderNode; borderNode = borderNode.next_sibling("border")) {
+				
+				int borderId = borderNode.attribute("id").as_int();
+				wxString brushName = wxString(brushNode.attribute("name").value());
+				if(!brushName.IsEmpty()) {
+					borderNames[borderId] = brushName;
+				}
+			}
+		}
+	}
 	
-	OutputDebugStringA(wxString::Format("Original version string: %s\n", versionStr).c_str());
-	OutputDebugStringA(wxString::Format("Formatted version: %s\n", versionWx).c_str());
+	// Now load borders.xml and use the names we found
+	wxString bordersPath = g_gui.GetDataDirectory() + "/" + dataDir + "/borders.xml";
 	
-	wxString bordersPath = g_gui.GetDataDirectory() + "/" + versionWx + "/borders.xml";
-	
-	OutputDebugStringA(wxString::Format("Attempting to load borders from: %s\n", bordersPath).c_str());
-	
-	// Add default text to choices
 	border_from_choice->Append("Select border to replace...");
 	border_to_choice->Append("Select border to replace with...");
 	border_from_choice->SetSelection(0);
 	border_to_choice->SetSelection(0);
 	
 	pugi::xml_document doc;
-	pugi::xml_parse_result result = doc.load_file(bordersPath.mb_str());
-	
-	if(result) {
-		OutputDebugStringA("Successfully opened borders.xml\n");
-		for(pugi::xml_node borderNode = doc.child("materials").child("border"); borderNode; borderNode = borderNode.next_sibling("border")) {
-			int borderId = borderNode.attribute("id").as_int();
-			wxString comment;
+	if(doc.load_file(bordersPath.mb_str())) {
+		for(pugi::xml_node borderNode = doc.child("materials").child("border"); 
+			borderNode; borderNode = borderNode.next_sibling("border")) {
 			
-			// Count border items
+			int borderId = borderNode.attribute("id").as_int();
+			wxString name = borderNames[borderId];
+			
 			int itemCount = 0;
-			for(pugi::xml_node itemNode = borderNode.child("borderitem"); itemNode; itemNode = itemNode.next_sibling("borderitem")) {
+			for(pugi::xml_node itemNode = borderNode.child("borderitem"); 
+				itemNode; itemNode = itemNode.next_sibling("borderitem")) {
 				itemCount++;
 			}
 			
-			// Try to extract comment
-			for(pugi::xml_node node = borderNode.next_sibling(); node; node = node.next_sibling()) {
-				if(node.type() == pugi::node_comment) {
-					comment = wxString(node.value()).Trim();
-					break;
-				}
-			}
-			
 			wxString displayText;
-			if(!comment.IsEmpty()) {
-				displayText = wxString::Format("Border %d [%d] (%s)", borderId, itemCount, comment);
+			if(!name.IsEmpty()) {
+				displayText = wxString::Format("%s [%d] (%d items)", name, borderId, itemCount);
 			} else {
-				displayText = wxString::Format("Border %d [%d]", borderId, itemCount);
+				displayText = wxString::Format("Border %d (%d items)", borderId, itemCount);
 			}
 			
 			border_from_choice->Append(displayText);
 			border_to_choice->Append(displayText);
-			
-			OutputDebugStringA(wxString::Format("Added border ID %d with %d items %s\n", 
-				borderId,
-				itemCount,
-				comment.IsEmpty() ? "" : wxString::Format("(%s)", comment).c_str()
-			).c_str());
-		}
-	} else {
-		OutputDebugStringA(wxString::Format("Failed to load borders.xml: %s\n", result.description()).c_str());
-		OutputDebugStringA(wxString::Format("Error at offset: %zu\n", result.offset).c_str());
-		
-		// Check file access
-		if(wxFileExists(bordersPath)) {
-			OutputDebugStringA("File exists but could not be loaded - possible permission or format issue\n");
-		} else {
-			OutputDebugStringA("File does not exist!\n");
 		}
 	}
 }
@@ -877,8 +865,29 @@ void ReplaceItemsDialog::OnAddBorderItems(wxCommandEvent& WXUNUSED(event)) {
 
 	// Get border IDs from the actual XML file
 	wxString versionStr(g_gui.GetCurrentVersion().getName());
-	versionStr.Replace(".", "");
-	wxString bordersPath = g_gui.GetDataDirectory() + "/" + versionStr + "/borders.xml";
+	wxString dataDir;
+	
+	// Load clients.xml to get data directory
+	pugi::xml_document clientsDoc;
+	wxString clientsPath = g_gui.GetDataDirectory() + "/clients.xml";
+	pugi::xml_parse_result clientsResult = clientsDoc.load_file(clientsPath.mb_str());
+	
+	if(clientsResult) {
+		for(pugi::xml_node clientNode = clientsDoc.child("client_config").child("clients").child("client"); 
+			clientNode; clientNode = clientNode.next_sibling("client")) {
+			if(versionStr == clientNode.attribute("name").value()) {
+				dataDir = wxString(clientNode.attribute("data_directory").value());
+				break;
+			}
+		}
+	}
+	
+	if(dataDir.IsEmpty()) {
+		OutputDebugStringA("Failed to find data directory in clients.xml\n");
+		return;
+	}
+	
+	wxString bordersPath = g_gui.GetDataDirectory() + "/" + dataDir + "/borders.xml";
 	
 	OutputDebugStringA(wxString::Format("Loading borders from: %s\n", bordersPath).c_str());
 	
@@ -926,4 +935,80 @@ void ReplaceItemsDialog::OnAddBorderItems(wxCommandEvent& WXUNUSED(event)) {
 		OutputDebugStringA("Failed to load borders.xml\n");
 		wxMessageBox("Failed to load borders configuration!", "Error", wxOK | wxICON_ERROR);
 	}
+}
+
+void ReplaceItemsDialog::OnBorderFromSelect(wxCommandEvent& event) {
+	int idx = event.GetSelection();
+	if(idx > 0) { // Skip "Select border..." entry
+		wxString dataDir = GetDataDirectoryForVersion(g_gui.GetCurrentVersion().getName());
+		if(!dataDir.IsEmpty()) {
+			wxString bordersPath = g_gui.GetDataDirectory() + "/" + dataDir + "/borders.xml";
+			pugi::xml_document doc;
+			if(doc.load_file(bordersPath.mb_str())) {
+				int currentBorder = 0;
+				for(pugi::xml_node borderNode = doc.child("materials").child("border"); 
+					borderNode; borderNode = borderNode.next_sibling("border")) {
+					
+					if(currentBorder == idx - 1) {
+						// Get first borderitem
+						if(pugi::xml_node firstItem = borderNode.child("borderitem")) {
+							uint16_t itemId = firstItem.attribute("item").as_uint();
+							replace_button->SetItemId(itemId);
+							OutputDebugStringA(wxString::Format("Setting replace button item ID to: %d\n", itemId).c_str());
+						}
+						break;
+					}
+					currentBorder++;
+				}
+			}
+		}
+	} else {
+		// Reset if "Select border..." is chosen
+		replace_button->SetItemId(0);
+	}
+}
+
+void ReplaceItemsDialog::OnBorderToSelect(wxCommandEvent& event) {
+	int idx = event.GetSelection();
+	if(idx > 0) {
+		wxString dataDir = GetDataDirectoryForVersion(g_gui.GetCurrentVersion().getName());
+		if(!dataDir.IsEmpty()) {
+			wxString bordersPath = g_gui.GetDataDirectory() + "/" + dataDir + "/borders.xml";
+			pugi::xml_document doc;
+			if(doc.load_file(bordersPath.mb_str())) {
+				int currentBorder = 0;
+				for(pugi::xml_node borderNode = doc.child("materials").child("border"); 
+					borderNode; borderNode = borderNode.next_sibling("border")) {
+					
+					if(currentBorder == idx - 1) {
+						if(pugi::xml_node firstItem = borderNode.child("borderitem")) {
+							uint16_t itemId = firstItem.attribute("item").as_uint();
+							with_button->SetItemId(itemId);
+							OutputDebugStringA(wxString::Format("Setting with button item ID to: %d\n", itemId).c_str());
+						}
+						break;
+					}
+					currentBorder++;
+				}
+			}
+		}
+	} else {
+		// Reset if "Select border..." is chosen
+		with_button->SetItemId(0);
+	}
+}
+
+// Helper function to avoid code duplication
+wxString ReplaceItemsDialog::GetDataDirectoryForVersion(const wxString& versionStr) {
+	pugi::xml_document clientsDoc;
+	wxString clientsPath = g_gui.GetDataDirectory() + "/clients.xml";
+	if(clientsDoc.load_file(clientsPath.mb_str())) {
+		for(pugi::xml_node clientNode = clientsDoc.child("client_config").child("clients").child("client"); 
+			clientNode; clientNode = clientNode.next_sibling("client")) {
+			if(versionStr == clientNode.attribute("name").value()) {
+				return wxString(clientNode.attribute("data_directory").value());
+			}
+		}
+	}
+	return wxString();
 }

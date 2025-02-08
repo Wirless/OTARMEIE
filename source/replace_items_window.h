@@ -130,6 +130,10 @@ public:
 	void OnSwapCheckboxClicked(wxCommandEvent& event);
 	void AddItemsFromRange(const wxString& rangeStr, uint16_t withId);
 	uint16_t getActualItemIdFromBrush(const Brush* brush) const;
+	void OnBorderFromSelect(wxCommandEvent& event);
+	void OnBorderToSelect(wxCommandEvent& event);
+	wxString GetDataDirectoryForVersion(const wxString& versionStr);
+	
 
 private:
 	void UpdateWidgets();
@@ -174,12 +178,12 @@ private:
 
 	void LoadBorderChoices();
 	void OnAddBorderItems(wxCommandEvent& event);
-	void OnBorderFromSelect(wxCommandEvent& event) { /* Optional implementation */ }
-	void OnBorderToSelect(wxCommandEvent& event) { /* Optional implementation */ }
 
 	static const int ID_SAVE_PRESET = 1001;
 	static const int ID_LOAD_PRESET = 1002;
 	static const int ID_MANAGE_PRESETS = 1003;
+
+	
 };
 
 #endif
