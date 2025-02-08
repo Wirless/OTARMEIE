@@ -237,6 +237,7 @@
 		<item name="Fog in light view" hotkey="" action="EXPERIMENTAL_FOG" help="Apply fog filter to light effect."/>
 	</menu>
 	<menu name="About">
+		<item name="Hotkeys..." hotkey="F6" action="SHOW_HOTKEYS" help="Configure editor hotkeys"/>
 		<item name="Extensions..." hotkey="F2" action="EXTENSIONS" help=""/>
 		<item name="Goto Website" hotkey="F3" action="GOTO_WEBSITE" help=""/>
 		<item name="About..." hotkey="F1" action="ABOUT" help=""/>

@@ -38,6 +38,7 @@ public:
 	void HideAll(bool update = true);
 	void LoadPerspective();
 	void SavePerspective();
+	void RegisterHotkeys();
 
 	void OnStandardButtonClick(wxCommandEvent& event);
 	void OnBrushesButtonClick(wxCommandEvent& event);

@@ -157,6 +157,7 @@ namespace MenuBar {
 
 		EXPERIMENTAL_FOG,
 		MAP_REMOVE_DUPLICATES,
+		SHOW_HOTKEYS,
 	};
 }
 
@@ -289,6 +290,7 @@ public:
 	void OnListExtensions(wxCommandEvent& event);
 	void OnGotoWebsite(wxCommandEvent& event);
 	void OnAbout(wxCommandEvent& event);
+	void OnShowHotkeys(wxCommandEvent& event);
 
 protected:
 	// Load and returns a menu item, also sets accelerator
