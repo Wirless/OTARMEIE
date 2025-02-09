@@ -133,10 +133,16 @@ public:
 	void OnBorderFromSelect(wxCommandEvent& event);
 	void OnBorderToSelect(wxCommandEvent& event);
 	wxString GetDataDirectoryForVersion(const wxString& versionStr);
-	
+	void AddWallVariations(uint16_t fromId, uint16_t toId);
+	void LoadWallChoices();
+	void OnWallFromSelect(wxCommandEvent& event);
+	void OnWallToSelect(wxCommandEvent& event);
+	void OnAddWallItems(wxCommandEvent& event);
+		void AddReplacingItem(uint16_t fromId, uint16_t toId);
 
 private:
 	void UpdateWidgets();
+
 
 	ReplaceItemsListBox* list;
 	ReplaceItemsButton* replace_button;
@@ -168,6 +174,12 @@ private:
 	// Add to private members section around line 150
 	wxButton* add_border_button;
 
+	// Add after border choice declarations
+	wxChoice* wall_from_choice;
+	wxChoice* wall_to_choice;
+	wxChoice* wall_orientation_choice;
+	wxButton* add_wall_button;
+
 	void OnPresetSelect(wxCommandEvent& event);
 	void OnAddPreset(wxCommandEvent& event);
 	void OnRemovePreset(wxCommandEvent& event);
@@ -183,7 +195,9 @@ private:
 	static const int ID_LOAD_PRESET = 1002;
 	static const int ID_MANAGE_PRESETS = 1003;
 
-	
+	wxTextCtrl* replace_id_input;
+	wxTextCtrl* with_id_input;
+	wxButton* add_manual_button;
 };
 
 #endif
