@@ -1215,16 +1215,35 @@ void ReplaceItemsDialog::OnAddWallItems(wxCommandEvent& WXUNUSED(event)) {
 							for(pugi::xml_node fromItem = fromWallNode.child("item"); 
 								fromItem; fromItem = fromItem.next_sibling("item")) {
 								
-								if(fromItem.attribute("chance").as_int() > 0) {
-									uint16_t fromItemId = fromItem.attribute("id").as_uint();
-									
-									pugi::xml_node toItem = toWallNode.child("item");
-									while(toItem && toItem.attribute("chance").as_int() == 0) {
-										toItem = toItem.next_sibling("item");
-									}
-									
-									if(toItem) {
-										AddReplacingItem(fromItemId, toItem.attribute("id").as_uint());
+								uint16_t fromItemId = fromItem.attribute("id").as_uint();
+								
+								// Find corresponding item in target wall
+								pugi::xml_node toItem = toWallNode.child("item");
+								std::vector<pugi::xml_node> availableItems;
+								
+								// Collect all available items from target wall
+								while(toItem) {
+									availableItems.push_back(toItem);
+									toItem = toItem.next_sibling("item");
+								}
+								
+								if(!availableItems.empty()) {
+									// If we have the same number of items, match them directly
+									if(availableItems.size() > 1) {
+										// Find the corresponding position in target items
+										int fromPos = 0;
+										pugi::xml_node tempItem = fromWallNode.child("item");
+										while(tempItem && tempItem != fromItem) {
+											fromPos++;
+											tempItem = tempItem.next_sibling("item");
+										}
+										
+										// Use corresponding position if available, otherwise use first item
+										size_t targetPos = std::min(fromPos, (int)availableItems.size() - 1);
+										AddReplacingItem(fromItemId, availableItems[targetPos].attribute("id").as_uint());
+									} else {
+										// If target has fewer items, use the first one for all replacements
+										AddReplacingItem(fromItemId, availableItems[0].attribute("id").as_uint());
 									}
 								}
 							}
@@ -1240,7 +1259,6 @@ void ReplaceItemsDialog::OnAddWallItems(wxCommandEvent& WXUNUSED(event)) {
 								// Try to find matching door in target wall
 								pugi::xml_node toDoor = toWallNode.child("door");
 								pugi::xml_node fallbackDoor;
-								uint16_t fallbackItemId = 0;
 								
 								while(toDoor) {
 									if(toDoor.attribute("type").value() == doorType &&
@@ -1248,30 +1266,17 @@ void ReplaceItemsDialog::OnAddWallItems(wxCommandEvent& WXUNUSED(event)) {
 									   toDoor.attribute("locked").as_bool() == isLocked) {
 										break;
 									}
-									if(!fallbackDoor && toDoor.attribute("type").value() == doorType) {
-										fallbackDoor = toDoor;
-									}
+									// Keep track of first door as fallback
+									if(!fallbackDoor) fallbackDoor = toDoor;
 									toDoor = toDoor.next_sibling("door");
 								}
 								
+								// If no exact match found, use fallback door
 								if(!toDoor) toDoor = fallbackDoor;
-								
-								if(!toDoor) {
-									pugi::xml_node basicItem = toWallNode.child("item");
-									while(basicItem && basicItem.attribute("chance").as_int() == 0) {
-										basicItem = basicItem.next_sibling("item");
-									}
-									if(basicItem) {
-										fallbackItemId = basicItem.attribute("id").as_uint();
-									}
-								}
 								
 								if(toDoor) {
 									AddReplacingItem(fromDoor.attribute("id").as_uint(), 
 												   toDoor.attribute("id").as_uint());
-								} else if(fallbackItemId > 0) {
-									AddReplacingItem(fromDoor.attribute("id").as_uint(), 
-												   fallbackItemId);
 								}
 							}
 						}
