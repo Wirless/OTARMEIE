@@ -14,71 +14,7 @@
 // You should have received a copy of the GNU General Public License
 // along with this program. If not, see <http://www.gnu.org/licenses/>.
 //////////////////////////////////////////////////////////////////////
-/*
-Task: Implement Automatic RAW Selection on Right-Click
 
-Description:
-Add a preference option to automatically select RAW brush when right-clicking an item on the map, 
-while still showing the context menu. This will improve workflow efficiency for users who frequently 
-use the RAW selection tool.
-
-Required Changes:
-
-1. Add new preference setting:
-- Location: preferences.cpp after enable_tileset_editing_chkbox (line 165)
-- Add checkbox for "Auto-select RAW on right-click"
-- Add to Config enum and settings
-
-2. Modify map right-click handling:
-- Location: map_display.cpp MapPopupMenu::Update()
-- Check new preference setting
-- If enabled, call RAW selection before showing menu
-
-3. Add setting to preferences window:
-- Add to general preferences page
-- Add tooltip explaining the feature
-
-Files to Modify:
-
-1. preferences.cpp:
-- Add checkbox control
-- Add to Apply() method
-- Add default value handling
-
-2. map_display.cpp:
-- Modify popup menu creation
-- Add RAW selection logic before menu display
-
-3. settings.h:
-- Add new config enum value
-
-4. settings.cpp:
-- Add default value handling
-
-Implementation Details:
-
-1. New Config enum value:
-AUTO_SELECT_RAW = 123  // Add to enum in settings.h
-
-2. New preference checkbox:
-auto_select_raw_chkbox = newd wxCheckBox(
-    general_page, 
-    wxID_ANY, 
-    "Auto-select RAW on right-click",
-    "Automatically selects RAW brush when right-clicking items"
-);
-
-3. MapPopupMenu logic modification:
-if(g_settings.getBoolean(Config::AUTO_SELECT_RAW) && topSelectedItem) {
-    g_gui.SelectBrush(topSelectedItem->getRAWBrush(), TILESET_RAW);
-}
-
-Key Considerations:
-- Maintain existing right-click menu functionality
-- Only auto-select when valid item is clicked
-- Handle cases where RAW brush cannot be created
-- Preserve undo/redo capability
-*/
 #include "main.h"
 
 #include <wx/collpane.h>

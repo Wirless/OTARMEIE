@@ -1339,16 +1339,17 @@ void MainMenuBar::OnBorderizeSelection(wxCommandEvent& WXUNUSED(event)) {
 }
 
 void MainMenuBar::OnBorderizeMap(wxCommandEvent& WXUNUSED(event)) {
-	if (!g_gui.IsEditorOpen()) {
-		return;
-	}
+    if (!g_gui.IsEditorOpen()) {
+        return;
+    }
 
-	int ret = g_gui.PopupDialog("Borderize Map", "Are you sure you want to borderize the entire map (this action cannot be undone)?", wxYES | wxNO);
-	if (ret == wxID_YES) {
-		g_gui.GetCurrentEditor()->borderizeMap(true);
-	}
+    int ret = g_gui.PopupDialog("Borderize Map", 
+        "Do you want to borderize the entire map? This will process the map in chunks.", wxYES | wxNO);
+    if (ret == wxID_YES) {
+        g_gui.GetCurrentEditor()->borderizeMap(true);
+    }
 
-	g_gui.RefreshView();
+    g_gui.RefreshView();
 }
 
 void MainMenuBar::OnRandomizeSelection(wxCommandEvent& WXUNUSED(event)) {

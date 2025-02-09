@@ -40,10 +40,12 @@
 #include "live_client.h"
 #include "live_action.h"
 #include "minimap_window.h"
+#include "borderize_window.h"
 
 Editor::Editor(CopyBuffer& copybuffer) :
 	live_server(nullptr),
 	live_client(nullptr),
+
 	actionQueue(newd ActionQueue(*this)),
 	selection(*this),
 	copybuffer(copybuffer),
@@ -823,39 +825,30 @@ bool Editor::importMap(FileName filename, int import_x_offset, int import_y_offs
 void Editor::borderizeSelection() {
 	if (selection.size() == 0) {
 		g_gui.SetStatusText("No items selected. Can't borderize.");
+		return;
 	}
 
-	Action* action = actionQueue->createAction(ACTION_BORDERIZE);
-	for (Tile* tile : selection) {
-		Tile* newTile = tile->deepCopy(map);
-		newTile->borderize(&map);
-		newTile->select();
-		action->addChange(newd Change(newTile));
-	}
-	addAction(action);
+	BorderizeWindow* window = newd BorderizeWindow(g_gui.root, *this);
+	window->Start();
+	window->Destroy();
 }
 
 void Editor::borderizeMap(bool showdialog) {
-	if (showdialog) {
-		g_gui.CreateLoadBar("Borderizing map...");
-	}
-
-	uint64_t tiles_done = 0;
-	for (TileLocation* tileLocation : map) {
-		if (showdialog && tiles_done % 4096 == 0) {
-			g_gui.SetLoadDone(static_cast<int32_t>(tiles_done / double(map.tilecount) * 100.0));
+	if (!showdialog) {
+		// Old immediate processing for automated calls
+		uint64_t tiles_done = 0;
+		for (TileLocation* tileLocation : map) {
+			Tile* tile = tileLocation->get();
+			ASSERT(tile);
+			tile->borderize(&map);
+			++tiles_done;
 		}
-
-		Tile* tile = tileLocation->get();
-		ASSERT(tile);
-
-		tile->borderize(&map);
-		++tiles_done;
+		return;
 	}
 
-	if (showdialog) {
-		g_gui.DestroyLoadBar();
-	}
+	BorderizeWindow* window = newd BorderizeWindow(g_gui.root, *this);
+	window->Start();
+	window->Destroy();
 }
 
 void Editor::randomizeSelection() {
@@ -2054,3 +2047,4 @@ void Editor::updateMinimapTile(Tile* tile) {
 		g_gui.minimap->UpdateDrawnTiles(positions);
 	}
 }
+

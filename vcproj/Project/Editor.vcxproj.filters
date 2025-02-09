@@ -387,6 +387,7 @@
     </ClInclude>
     <ClInclude Include="..\..\source\string_utils.h" />
     <ClInclude Include="..\..\source\hotkey_manager.h" />
+    <ClInclude Include="..\..\source\borderize_window.h" />
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="..\..\source\json\json_spirit_reader.cpp">
@@ -684,6 +685,7 @@
     </ClCompile>
     <ClCompile Include="..\..\source\string_utils.cpp" />
     <ClCompile Include="..\..\source\hotkey_manager.cpp" />
+    <ClCompile Include="..\..\source\borderize_window.cpp" />
   </ItemGroup>
   <ItemGroup>
     <ResourceCompile Include="Editor.rc">
