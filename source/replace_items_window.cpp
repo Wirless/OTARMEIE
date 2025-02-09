@@ -194,7 +194,7 @@ void ReplaceItemsListBox::Clear() {
 
 ReplaceItemsDialog::ReplaceItemsDialog(wxWindow* parent, bool selectionOnly) :
 	wxDialog(parent, wxID_ANY, (selectionOnly ? "Replace Items on Selection" : "Replace Items"), 
-		wxDefaultPosition, wxSize(500, 800), wxDEFAULT_DIALOG_STYLE),
+		wxDefaultPosition, wxSize(600, 800), wxDEFAULT_DIALOG_STYLE),
 	selectionOnly(selectionOnly) {
 	SetSizeHints(wxDefaultSize, wxDefaultSize);
 
@@ -303,37 +303,39 @@ ReplaceItemsDialog::ReplaceItemsDialog(wxWindow* parent, bool selectionOnly) :
 	// Create main buttons row (Add, Remove, Execute, Close)
 	wxBoxSizer* buttons_sizer = new wxBoxSizer(wxHORIZONTAL);
 
+	// Left side buttons with fixed width
+	wxBoxSizer* left_buttons = new wxBoxSizer(wxHORIZONTAL);
 	add_button = new wxButton(this, wxID_ANY, wxT("Add"));
 	add_button->Enable(false);
-	buttons_sizer->Add(add_button, 0, wxALL, 5);
-	add_button->SetMinSize(wxSize(60, 30));
+	add_button->SetMinSize(wxSize(80, 30));
+	left_buttons->Add(add_button, 0, wxRIGHT, 5);
 
 	remove_button = new wxButton(this, wxID_ANY, wxT("Remove"));
 	remove_button->Enable(false);
-	buttons_sizer->Add(remove_button, 0, wxALL, 5);
-	remove_button->SetMinSize(wxSize(60, 30));
+	remove_button->SetMinSize(wxSize(80, 30));
+	left_buttons->Add(remove_button, 0, wxRIGHT, 5);
 
-	buttons_sizer->Add(0, 0, 1, wxEXPAND, 5);
+	buttons_sizer->Add(left_buttons, 0, wxALIGN_CENTER_VERTICAL | wxLEFT, 5);
 
-	// Create a static box for the swap checkbox with increased size
-	wxStaticBoxSizer* swap_box = new wxStaticBoxSizer(new wxStaticBox(this, wxID_ANY, "Swap <-->"), wxVERTICAL);
-	swap_box->GetStaticBox()->SetMinSize(wxSize(140, 60)); // Increased box size
+	// Center: Swap checkbox with proper proportions
+	wxBoxSizer* center_sizer = new wxBoxSizer(wxHORIZONTAL);
+	swap_checkbox = new wxCheckBox(this, wxID_ANY, "Swap Items");
+	swap_checkbox->SetToolTip("When checked, items will be swapped instead of just replaced");
+	center_sizer->Add(swap_checkbox, 1, wxALL | wxALIGN_CENTER_VERTICAL, 5);
+	buttons_sizer->Add(center_sizer, 1, wxEXPAND | wxALL, 5);
 
-	// Add checkbox with better spacing and positioning, but no text
-	swap_checkbox = new wxCheckBox(swap_box->GetStaticBox(), wxID_ANY, "");
-	swap_box->Add(swap_checkbox, 0, wxALL | wxALIGN_CENTER, 10); // Increased padding
-
-	// Add it to the buttons_sizer before the execute button
-	buttons_sizer->Add(swap_box, 0, wxALL | wxALIGN_CENTER_VERTICAL, 5);
-
+	// Right side buttons with fixed width
+	wxBoxSizer* right_buttons = new wxBoxSizer(wxHORIZONTAL);
 	execute_button = new wxButton(this, wxID_ANY, wxT("Execute"));
 	execute_button->Enable(false);
-	buttons_sizer->Add(execute_button, 0, wxALL, 5);
-	execute_button->SetMinSize(wxSize(60, 30));
+	execute_button->SetMinSize(wxSize(100, 30));
+	right_buttons->Add(execute_button, 0, wxRIGHT, 5);
 
 	close_button = new wxButton(this, wxID_ANY, wxT("Close"));
-	buttons_sizer->Add(close_button, 0, wxALL, 5);
-	close_button->SetMinSize(wxSize(60, 30));
+	close_button->SetMinSize(wxSize(80, 30));
+	right_buttons->Add(close_button, 0, wxRIGHT, 5);
+
+	buttons_sizer->Add(right_buttons, 0, wxALIGN_CENTER_VERTICAL | wxRIGHT, 5);
 
 	sizer->Add(buttons_sizer, 1, wxALL | wxLEFT | wxRIGHT | wxSHAPED, 5);
 
@@ -1063,17 +1065,26 @@ void ReplaceItemsDialog::LoadWallChoices() {
 				wxString name = brushNode.attribute("name").value();
 				uint16_t serverId = brushNode.attribute("server_lookid").as_uint();
 				
-				// Count wall variations
-				int itemCount = 0;
+				// Count ALL variations including doors and windows
+				int totalVariations = 0;
 				for(pugi::xml_node wallNode = brushNode.child("wall"); 
 					wallNode; wallNode = wallNode.next_sibling("wall")) {
-					if(pugi::xml_node itemNode = wallNode.child("item")) {
-						itemCount++;
+					// Count items
+					for(pugi::xml_node itemNode = wallNode.child("item"); 
+						itemNode; itemNode = itemNode.next_sibling("item")) {
+						if(itemNode.attribute("chance").as_int() > 0) {
+							totalVariations++;
+						}
+					}
+					// Count doors
+					for(pugi::xml_node doorNode = wallNode.child("door"); 
+						doorNode; doorNode = doorNode.next_sibling("door")) {
+						totalVariations++;
 					}
 				}
 				
 				wxString displayText = wxString::Format("%s [%d] (%d variations)", 
-					name, serverId, itemCount);
+					name, serverId, totalVariations);
 				
 				wall_from_choice->Append(displayText);
 				wall_to_choice->Append(displayText);
@@ -1162,65 +1173,161 @@ void ReplaceItemsDialog::OnWallToSelect(wxCommandEvent& event) {
 void ReplaceItemsDialog::OnAddWallItems(wxCommandEvent& WXUNUSED(event)) {
 	int fromIdx = wall_from_choice->GetSelection();
 	int toIdx = wall_to_choice->GetSelection();
-	
-	if(fromIdx <= 0 || toIdx <= 0) {
-		wxMessageBox("Please select both wall types!", "Error", wxOK | wxICON_ERROR);
-		return;
-	}
-	
 	wxString orientation = wall_orientation_choice->GetStringSelection().Lower();
 	
+	if(fromIdx > 0 && toIdx > 0) {
+		wxString dataDir = GetDataDirectoryForVersion(g_gui.GetCurrentVersion().getName());
+		if(!dataDir.IsEmpty()) {
+			wxString wallsPath = g_gui.GetDataDirectory() + "/" + dataDir + "/walls.xml";
+			pugi::xml_document doc;
+			if(doc.load_file(wallsPath.mb_str())) {
+				pugi::xml_node fromBrush;
+				pugi::xml_node toBrush;
+				
+				int currentWall = 0;
+				for(pugi::xml_node brushNode = doc.child("materials").child("brush"); 
+					brushNode; brushNode = brushNode.next_sibling("brush")) {
+					
+					if(std::string(brushNode.attribute("type").value()) == "wall") {
+						if(currentWall == fromIdx - 1) {
+							fromBrush = brushNode;
+						} else if(currentWall == toIdx - 1) {
+							toBrush = brushNode;
+						}
+						
+						if(fromBrush && toBrush) {
+							break;
+						}
+						
+						currentWall++;
+					}
+				}
+				
+				if(fromBrush && toBrush) {
+					for(pugi::xml_node fromWallNode = fromBrush.child("wall"); 
+						fromWallNode; fromWallNode = fromWallNode.next_sibling("wall")) {
+						
+						std::string wallType = fromWallNode.attribute("type").value();
+						if(orientation == "all" || orientation == wallType) {
+							pugi::xml_node toWallNode = toBrush.find_child_by_attribute("wall", "type", wallType.c_str());
+							
+							if(toWallNode) {
+								int itemIdx = 0;
+								for(pugi::xml_node fromItemNode = fromWallNode.child("item"); 
+									fromItemNode; fromItemNode = fromItemNode.next_sibling("item")) {
+									
+									uint16_t fromItemId = fromItemNode.attribute("id").as_uint();
+									
+									pugi::xml_node toItemNode = toWallNode.child("item");
+									for(int i = 0; i < itemIdx && toItemNode; i++) {
+										toItemNode = toItemNode.next_sibling("item");
+									}
+									
+									if(toItemNode) {
+										uint16_t toItemId = toItemNode.attribute("id").as_uint();
+										
+										ReplacingItem item;
+										item.replaceId = fromItemId;
+										item.withId = toItemId;
+										item.complete = false;
+										item.total = 0;
+										
+										list->AddItem(item);
+									}
+									
+									itemIdx++;
+								}
+							}
+						}
+					}
+					
+					UpdateWidgets();
+					list->Refresh();
+				}
+			}
+		}
+	}
+}
+
+void ReplaceItemsDialog::AddWallVariations(uint16_t fromId, uint16_t toId) {
+	if (fromId == 0 || toId == 0 || fromId == toId) {
+		return;
+	}
+
+	// Get wall brushes by looking up the items first
+	const ItemType& fromType = g_items[fromId];
+	const ItemType& toType = g_items[toId];
+	
+	if (!fromType.brush || !toType.brush || !fromType.isWall || !toType.isWall) {
+		return;
+	}
+
+	wxString orientation = wall_orientation_choice->GetStringSelection().Lower();
+	
+	// Load wall data from XML since we can't access protected members directly
 	wxString dataDir = GetDataDirectoryForVersion(g_gui.GetCurrentVersion().getName());
 	if(dataDir.IsEmpty()) return;
 	
 	wxString wallsPath = g_gui.GetDataDirectory() + "/" + dataDir + "/walls.xml";
 	pugi::xml_document doc;
-	if(doc.load_file(wallsPath.mb_str())) {
-		std::map<std::string, uint16_t> fromItems;
-		std::map<std::string, uint16_t> toItems;
+	if(!doc.load_file(wallsPath.mb_str())) return;
+
+	// Find the brush nodes for our walls
+	pugi::xml_node fromBrush, toBrush;
+	for(pugi::xml_node brushNode = doc.child("materials").child("brush"); 
+		brushNode; brushNode = brushNode.next_sibling("brush")) {
 		
-		int currentWall = 0;
-		for(pugi::xml_node brushNode = doc.child("materials").child("brush"); 
-			brushNode; brushNode = brushNode.next_sibling("brush")) {
+		if(std::string(brushNode.attribute("type").value()) == "wall") {
+			uint16_t serverId = brushNode.attribute("server_lookid").as_uint();
+			if(serverId == fromId) {
+				fromBrush = brushNode;
+			} else if(serverId == toId) {
+				toBrush = brushNode;
+			}
+		}
+	}
+
+	if(!fromBrush || !toBrush) return;
+
+	// Process each wall type
+	for(pugi::xml_node fromWallNode = fromBrush.child("wall"); 
+		fromWallNode; fromWallNode = fromWallNode.next_sibling("wall")) {
+		
+		std::string wallType = fromWallNode.attribute("type").value();
+		if(orientation == "all" || orientation == wallType) {
+			pugi::xml_node toWallNode = toBrush.find_child_by_attribute(
+				"wall", "type", wallType.c_str());
 			
-			if(std::string(brushNode.attribute("type").value()) == "wall") {
-				if(currentWall == fromIdx - 1 || currentWall == toIdx - 1) {
-					for(pugi::xml_node wallNode = brushNode.child("wall"); 
-						wallNode; wallNode = wallNode.next_sibling("wall")) {
+			if(toWallNode) {
+				// Handle items and doors
+				for(pugi::xml_node fromChild = fromWallNode.first_child(); 
+					fromChild; fromChild = fromChild.next_sibling()) {
+					
+					std::string nodeName = fromChild.name();
+					if(nodeName == "item" || nodeName == "door") {
+						uint16_t fromItemId = fromChild.attribute("id").as_uint();
 						
-						std::string wallType = wallNode.attribute("type").value();
-						if(orientation == "all" || orientation == wallType) {
-							if(pugi::xml_node itemNode = wallNode.child("item")) {
-								uint16_t itemId = itemNode.attribute("id").as_uint();
-								
-								if(currentWall == fromIdx - 1) {
-									fromItems[wallType] = itemId;
-								} else {
-									toItems[wallType] = itemId;
-								}
+						// Find matching node in target wall
+						pugi::xml_node toChild = toWallNode.find_child_by_attribute(
+							nodeName.c_str(), "type", fromChild.attribute("type").value());
+							
+						if(toChild) {
+							uint16_t toItemId = toChild.attribute("id").as_uint();
+							
+							ReplacingItem item;
+							item.replaceId = fromItemId;
+							item.withId = toItemId;
+							item.complete = false;
+							item.total = 0;
+							
+							if(list->CanAdd(item.replaceId, item.withId)) {
+								list->AddItem(item);
 							}
 						}
 					}
 				}
-				currentWall++;
 			}
 		}
-		
-		// Add items to the replace list
-		for(const auto& pair : fromItems) {
-			if(toItems.count(pair.first)) {
-				ReplacingItem item;
-				item.replaceId = pair.second;
-				item.withId = toItems[pair.first];
-				item.complete = false;
-				item.total = 0;
-				
-				list->AddItem(item);
-			}
-		}
-		
-		UpdateWidgets();
-		list->Refresh();
 	}
 }
 

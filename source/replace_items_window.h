@@ -133,7 +133,11 @@ public:
 	void OnBorderFromSelect(wxCommandEvent& event);
 	void OnBorderToSelect(wxCommandEvent& event);
 	wxString GetDataDirectoryForVersion(const wxString& versionStr);
-	
+	void AddWallVariations(uint16_t fromId, uint16_t toId);
+	void LoadWallChoices();
+	void OnWallFromSelect(wxCommandEvent& event);
+	void OnWallToSelect(wxCommandEvent& event);
+	void OnAddWallItems(wxCommandEvent& event);
 
 private:
 	void UpdateWidgets();
@@ -185,16 +189,16 @@ private:
 	void LoadBorderChoices();
 	void OnAddBorderItems(wxCommandEvent& event);
 
-	void LoadWallChoices();
-	void OnWallFromSelect(wxCommandEvent& event);
-	void OnWallToSelect(wxCommandEvent& event);
-	void OnAddWallItems(wxCommandEvent& event);
+
+
 
 	static const int ID_SAVE_PRESET = 1001;
 	static const int ID_LOAD_PRESET = 1002;
 	static const int ID_MANAGE_PRESETS = 1003;
 
-	
+	wxTextCtrl* replace_id_input;
+	wxTextCtrl* with_id_input;
+	wxButton* add_manual_button;
 };
 
 #endif
