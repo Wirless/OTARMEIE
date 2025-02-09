@@ -138,9 +138,11 @@ public:
 	void OnWallFromSelect(wxCommandEvent& event);
 	void OnWallToSelect(wxCommandEvent& event);
 	void OnAddWallItems(wxCommandEvent& event);
+		void AddReplacingItem(uint16_t fromId, uint16_t toId);
 
 private:
 	void UpdateWidgets();
+
 
 	ReplaceItemsListBox* list;
 	ReplaceItemsButton* replace_button;
@@ -188,9 +190,6 @@ private:
 
 	void LoadBorderChoices();
 	void OnAddBorderItems(wxCommandEvent& event);
-
-
-
 
 	static const int ID_SAVE_PRESET = 1001;
 	static const int ID_LOAD_PRESET = 1002;

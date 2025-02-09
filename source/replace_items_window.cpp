@@ -1180,91 +1180,114 @@ void ReplaceItemsDialog::OnAddWallItems(wxCommandEvent& WXUNUSED(event)) {
 		if(!dataDir.IsEmpty()) {
 			wxString wallsPath = g_gui.GetDataDirectory() + "/" + dataDir + "/walls.xml";
 			pugi::xml_document doc;
-			if(doc.load_file(wallsPath.mb_str())) {
-				pugi::xml_node fromBrush;
-				pugi::xml_node toBrush;
+			if(!doc.load_file(wallsPath.mb_str())) return;
+
+			// Find source and target brushes
+			pugi::xml_node fromBrush, toBrush;
+			int currentWall = 0;
+			
+			for(pugi::xml_node brushNode = doc.child("materials").child("brush"); 
+				brushNode; brushNode = brushNode.next_sibling("brush")) {
 				
-				int currentWall = 0;
-				for(pugi::xml_node brushNode = doc.child("materials").child("brush"); 
-					brushNode; brushNode = brushNode.next_sibling("brush")) {
-					
-					if(std::string(brushNode.attribute("type").value()) == "wall") {
-						if(currentWall == fromIdx - 1) {
-							fromBrush = brushNode;
-						} else if(currentWall == toIdx - 1) {
-							toBrush = brushNode;
-						}
-						
-						if(fromBrush && toBrush) {
-							break;
-						}
-						
-						currentWall++;
+				if(std::string(brushNode.attribute("type").value()) == "wall") {
+					if(currentWall == fromIdx - 1) {
+						fromBrush = brushNode;
+					} else if(currentWall == toIdx - 1) {
+						toBrush = brushNode;
 					}
+					
+					if(fromBrush && toBrush) break;
+					currentWall++;
 				}
-				
-				if(fromBrush && toBrush) {
-					for(pugi::xml_node fromWallNode = fromBrush.child("wall"); 
-						fromWallNode; fromWallNode = fromWallNode.next_sibling("wall")) {
+			}
+			
+			if(fromBrush && toBrush) {
+				// Process each wall orientation
+				for(pugi::xml_node fromWallNode = fromBrush.child("wall"); 
+					fromWallNode; fromWallNode = fromWallNode.next_sibling("wall")) {
+					
+					std::string wallType = fromWallNode.attribute("type").value();
+					if(orientation == "all" || orientation == wallType) {
+						pugi::xml_node toWallNode = toBrush.find_child_by_attribute("wall", "type", wallType.c_str());
 						
-						std::string wallType = fromWallNode.attribute("type").value();
-						if(orientation == "all" || orientation == wallType) {
-							pugi::xml_node toWallNode = toBrush.find_child_by_attribute("wall", "type", wallType.c_str());
-							
-							if(toWallNode) {
-								int itemIdx = 0;
-								for(pugi::xml_node fromItemNode = fromWallNode.child("item"); 
-									fromItemNode; fromItemNode = fromItemNode.next_sibling("item")) {
+						if(toWallNode) {
+							// Handle regular wall items
+							for(pugi::xml_node fromItem = fromWallNode.child("item"); 
+								fromItem; fromItem = fromItem.next_sibling("item")) {
+								
+								if(fromItem.attribute("chance").as_int() > 0) {
+									uint16_t fromItemId = fromItem.attribute("id").as_uint();
 									
-									uint16_t fromItemId = fromItemNode.attribute("id").as_uint();
-									
-									pugi::xml_node toItemNode = toWallNode.child("item");
-									for(int i = 0; i < itemIdx && toItemNode; i++) {
-										toItemNode = toItemNode.next_sibling("item");
+									pugi::xml_node toItem = toWallNode.child("item");
+									while(toItem && toItem.attribute("chance").as_int() == 0) {
+										toItem = toItem.next_sibling("item");
 									}
 									
-									if(toItemNode) {
-										uint16_t toItemId = toItemNode.attribute("id").as_uint();
-										
-										ReplacingItem item;
-										item.replaceId = fromItemId;
-										item.withId = toItemId;
-										item.complete = false;
-										item.total = 0;
-										
-										list->AddItem(item);
+									if(toItem) {
+										AddReplacingItem(fromItemId, toItem.attribute("id").as_uint());
 									}
-									
-									itemIdx++;
+								}
+							}
+
+							// Handle doors with type matching
+							for(pugi::xml_node fromDoor = fromWallNode.child("door"); 
+								fromDoor; fromDoor = fromDoor.next_sibling("door")) {
+								
+								std::string doorType = fromDoor.attribute("type").value();
+								bool isOpen = fromDoor.attribute("open").as_bool();
+								bool isLocked = fromDoor.attribute("locked").as_bool();
+								
+								// Try to find matching door in target wall
+								pugi::xml_node toDoor = toWallNode.child("door");
+								pugi::xml_node fallbackDoor;
+								uint16_t fallbackItemId = 0;
+								
+								while(toDoor) {
+									if(toDoor.attribute("type").value() == doorType &&
+									   toDoor.attribute("open").as_bool() == isOpen &&
+									   toDoor.attribute("locked").as_bool() == isLocked) {
+										break;
+									}
+									if(!fallbackDoor && toDoor.attribute("type").value() == doorType) {
+										fallbackDoor = toDoor;
+									}
+									toDoor = toDoor.next_sibling("door");
+								}
+								
+								if(!toDoor) toDoor = fallbackDoor;
+								
+								if(!toDoor) {
+									pugi::xml_node basicItem = toWallNode.child("item");
+									while(basicItem && basicItem.attribute("chance").as_int() == 0) {
+										basicItem = basicItem.next_sibling("item");
+									}
+									if(basicItem) {
+										fallbackItemId = basicItem.attribute("id").as_uint();
+									}
+								}
+								
+								if(toDoor) {
+									AddReplacingItem(fromDoor.attribute("id").as_uint(), 
+												   toDoor.attribute("id").as_uint());
+								} else if(fallbackItemId > 0) {
+									AddReplacingItem(fromDoor.attribute("id").as_uint(), 
+												   fallbackItemId);
 								}
 							}
 						}
 					}
-					
-					UpdateWidgets();
-					list->Refresh();
 				}
+				
+				UpdateWidgets();
+				list->Refresh();
 			}
 		}
 	}
 }
 
 void ReplaceItemsDialog::AddWallVariations(uint16_t fromId, uint16_t toId) {
-	if (fromId == 0 || toId == 0 || fromId == toId) {
-		return;
-	}
+	if (fromId == 0 || toId == 0 || fromId == toId) return;
 
-	// Get wall brushes by looking up the items first
-	const ItemType& fromType = g_items[fromId];
-	const ItemType& toType = g_items[toId];
-	
-	if (!fromType.brush || !toType.brush || !fromType.isWall || !toType.isWall) {
-		return;
-	}
-
-	wxString orientation = wall_orientation_choice->GetStringSelection().Lower();
-	
-	// Load wall data from XML since we can't access protected members directly
 	wxString dataDir = GetDataDirectoryForVersion(g_gui.GetCurrentVersion().getName());
 	if(dataDir.IsEmpty()) return;
 	
@@ -1272,62 +1295,92 @@ void ReplaceItemsDialog::AddWallVariations(uint16_t fromId, uint16_t toId) {
 	pugi::xml_document doc;
 	if(!doc.load_file(wallsPath.mb_str())) return;
 
-	// Find the brush nodes for our walls
+	// Find source and target wall brushes
 	pugi::xml_node fromBrush, toBrush;
 	for(pugi::xml_node brushNode = doc.child("materials").child("brush"); 
 		brushNode; brushNode = brushNode.next_sibling("brush")) {
 		
 		if(std::string(brushNode.attribute("type").value()) == "wall") {
 			uint16_t serverId = brushNode.attribute("server_lookid").as_uint();
-			if(serverId == fromId) {
-				fromBrush = brushNode;
-			} else if(serverId == toId) {
-				toBrush = brushNode;
-			}
+			if(serverId == fromId) fromBrush = brushNode;
+			else if(serverId == toId) toBrush = brushNode;
 		}
 	}
 
 	if(!fromBrush || !toBrush) return;
 
-	// Process each wall type
+	// Process each wall orientation
 	for(pugi::xml_node fromWallNode = fromBrush.child("wall"); 
 		fromWallNode; fromWallNode = fromWallNode.next_sibling("wall")) {
 		
 		std::string wallType = fromWallNode.attribute("type").value();
-		if(orientation == "all" || orientation == wallType) {
-			pugi::xml_node toWallNode = toBrush.find_child_by_attribute(
-				"wall", "type", wallType.c_str());
+		pugi::xml_node toWallNode = toBrush.find_child_by_attribute("wall", "type", wallType.c_str());
+		
+		if(!toWallNode) continue;
+
+		// Handle regular wall items first
+		for(pugi::xml_node fromItem = fromWallNode.child("item"); 
+			fromItem; fromItem = fromItem.next_sibling("item")) {
 			
-			if(toWallNode) {
-				// Handle items and doors
-				for(pugi::xml_node fromChild = fromWallNode.first_child(); 
-					fromChild; fromChild = fromChild.next_sibling()) {
-					
-					std::string nodeName = fromChild.name();
-					if(nodeName == "item" || nodeName == "door") {
-						uint16_t fromItemId = fromChild.attribute("id").as_uint();
-						
-						// Find matching node in target wall
-						pugi::xml_node toChild = toWallNode.find_child_by_attribute(
-							nodeName.c_str(), "type", fromChild.attribute("type").value());
-							
-						if(toChild) {
-							uint16_t toItemId = toChild.attribute("id").as_uint();
-							
-							ReplacingItem item;
-							item.replaceId = fromItemId;
-							item.withId = toItemId;
-							item.complete = false;
-							item.total = 0;
-							
-							if(list->CanAdd(item.replaceId, item.withId)) {
-								list->AddItem(item);
-							}
-						}
-					}
+			if(fromItem.attribute("chance").as_int() > 0) {
+				uint16_t fromItemId = fromItem.attribute("id").as_uint();
+				
+				// Get first valid item from target wall
+				pugi::xml_node toItem = toWallNode.child("item");
+				while(toItem && toItem.attribute("chance").as_int() == 0) {
+					toItem = toItem.next_sibling("item");
+				}
+				
+				if(toItem) {
+					AddReplacingItem(fromItemId, toItem.attribute("id").as_uint());
 				}
 			}
 		}
+
+		// Handle doors with type matching
+		for(pugi::xml_node fromDoor = fromWallNode.child("door"); 
+			fromDoor; fromDoor = fromDoor.next_sibling("door")) {
+			
+			std::string doorType = fromDoor.attribute("type").value();
+			bool isOpen = fromDoor.attribute("open").as_bool();
+			bool isLocked = fromDoor.attribute("locked").as_bool();
+			
+			// Try to find matching door in target wall
+			pugi::xml_node toDoor = toWallNode.child("door");
+			pugi::xml_node fallbackDoor;
+			
+			while(toDoor) {
+				if(toDoor.attribute("type").value() == doorType &&
+				   toDoor.attribute("open").as_bool() == isOpen &&
+				   toDoor.attribute("locked").as_bool() == isLocked) {
+					break;
+				}
+				// Keep track of first door as fallback
+				if(!fallbackDoor) fallbackDoor = toDoor;
+				toDoor = toDoor.next_sibling("door");
+			}
+			
+			// If no exact match found, use fallback door
+			if(!toDoor) toDoor = fallbackDoor;
+			
+			if(toDoor) {
+				AddReplacingItem(fromDoor.attribute("id").as_uint(), 
+							   toDoor.attribute("id").as_uint());
+			}
+		}
+	}
+}
+
+// Helper method to add items to the replace list
+void ReplaceItemsDialog::AddReplacingItem(uint16_t fromId, uint16_t toId) {
+	ReplacingItem item;
+	item.replaceId = fromId;
+	item.withId = toId;
+	item.complete = false;
+	item.total = 0;
+	
+	if(list->CanAdd(item.replaceId, item.withId)) {
+		list->AddItem(item);
 	}
 }
 
