@@ -168,6 +168,12 @@ private:
 	// Add to private members section around line 150
 	wxButton* add_border_button;
 
+	// Add after border choice declarations
+	wxChoice* wall_from_choice;
+	wxChoice* wall_to_choice;
+	wxChoice* wall_orientation_choice;
+	wxButton* add_wall_button;
+
 	void OnPresetSelect(wxCommandEvent& event);
 	void OnAddPreset(wxCommandEvent& event);
 	void OnRemovePreset(wxCommandEvent& event);
@@ -178,6 +184,11 @@ private:
 
 	void LoadBorderChoices();
 	void OnAddBorderItems(wxCommandEvent& event);
+
+	void LoadWallChoices();
+	void OnWallFromSelect(wxCommandEvent& event);
+	void OnWallToSelect(wxCommandEvent& event);
+	void OnAddWallItems(wxCommandEvent& event);
 
 	static const int ID_SAVE_PRESET = 1001;
 	static const int ID_LOAD_PRESET = 1002;
