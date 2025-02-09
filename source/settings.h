@@ -180,6 +180,8 @@ namespace Config {
 		ALWAYS_SHOW_ZONES,
 		EXT_HOUSE_SHADER,
 
+		AUTO_SELECT_RAW_ON_RIGHTCLICK,
+
 		LAST,
 	};
 

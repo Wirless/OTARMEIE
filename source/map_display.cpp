@@ -2447,7 +2447,27 @@ void MapPopupMenu::Update() {
 			bool hasTable = false;
 			bool hasCollection = false;
 			Item* topItem = nullptr;
+			//this is where we have info about whats selected
 			Item* topSelectedItem = (selected_items.size() == 1 ? selected_items.back() : nullptr);
+			// With a valid single selected item, trigger auto-select RAW if enabled.
+			if (g_settings.getBoolean(Config::AUTO_SELECT_RAW_ON_RIGHTCLICK) &&
+				topSelectedItem && topSelectedItem->getRAWBrush()) {
+				// Call the existing handler to change the current brush to RAW.
+				// This reuses the logic in OnSelectRAWBrush and maintains consistent behavior.
+				if (editor.selection.size() != 1) {
+					return;
+				}
+				Tile* tile = editor.selection.getSelectedTile();
+				if (!tile) {
+					return;
+				}
+				Item* item = tile->getTopSelectedItem();
+
+				if (item && item->getRAWBrush()) {
+					g_gui.SelectBrush(item->getRAWBrush(), TILESET_RAW);
+				}
+			}
+
 			Creature* topCreature = tile->creature;
 			Spawn* topSpawn = tile->spawn;
 
@@ -2602,6 +2622,8 @@ void MapPopupMenu::Update() {
 			browseTile->Enable(anything_selected);
 		}
 	}
+	
+
 }
 
 void MapCanvas::getTilesToDraw(int mouse_map_x, int mouse_map_y, int floor, PositionVector* tilestodraw, PositionVector* tilestoborder, bool fill /*= false*/) {
@@ -3473,3 +3495,4 @@ void MapCanvas::OnSelectionToDoodad(wxCommandEvent& WXUNUSED(event)) {
         }
     }
 }
+

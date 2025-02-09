@@ -124,6 +124,9 @@ protected:
 	wxNotebookPage* CreateEditorPage();
 	wxNotebookPage* CreateClientPage();
 
+	// Add with other checkbox declarations
+	wxCheckBox* auto_select_raw_chkbox;
+
 	DECLARE_EVENT_TABLE()
 };
 

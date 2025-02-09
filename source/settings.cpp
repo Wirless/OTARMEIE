@@ -438,3 +438,4 @@ void Settings::save(bool endoftheworld) {
 		delete conf;
 	}
 }
+
