@@ -17,7 +17,7 @@ It is a fork of a [Map Editor](https://github.com/hampusborgos/rme) created by [
 
 You can find an engine compatible with OTBM format at [OTAcademy](https://github.com/OTAcademy), [OTLand](https://github.com/OTLand), [OpenTibiaBR](https://github.com/OpenTibiaBR) or other OT communities.
 
-Visit [OTAcademy discord](http://discord.gg/OTAcademy) if you are looking for support or updates.
+Visit [OTARMEIE discord](https://discord.gg/FD2cYKBq5E) if you are looking for support or updates.
 
 I want to contribute
 ====================
