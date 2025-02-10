@@ -1,5 +1,15 @@
-What is this?
+What is this? Idlers Tavern has screenshots of the new functions!!!!!![][][][][]
 =============
+
+
+https://discord.gg/FD2cYKBq5E
+
+OTR
+https://discord.gg/sdxUJJdFzC
+
+Rookgaard Independence
+https://discord.gg/CavZvnvRey
+
 
 This is a map editor for game servers that derivied from [OpenTibia](https://github.com/opentibia/server) server project.
 
