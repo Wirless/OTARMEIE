@@ -1,0 +1,5 @@
+Detect house functionality select area and automatically generate houses for certain street check where is door that leads to non protection zone area.
+the house has to be confined (closed walls)
+accept consecutive doors on the inside and choose outmost door as the entry.
+tag all walls
+if connected with second house then separate walls based on hatching

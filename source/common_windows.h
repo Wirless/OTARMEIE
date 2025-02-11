@@ -335,6 +335,7 @@ public:
 	void OnClickRemove(wxCommandEvent&);
 	void OnClickOK(wxCommandEvent&);
 	void OnClickCancel(wxCommandEvent&);
+	void OnPasteTempleText(wxCommandEvent&);
 
 protected:
 	void BuildListBox(bool doselect);
@@ -354,6 +355,8 @@ protected:
 	PositionCtrl* temple_position;
 	wxButton* remove_button;
 	wxButton* select_position_button;
+
+	wxTextCtrl* paste_temple_field;
 
 	DECLARE_EVENT_TABLE();
 };

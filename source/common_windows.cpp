@@ -1341,7 +1341,8 @@ END_EVENT_TABLE()
 
 EditTownsDialog::EditTownsDialog(wxWindow* parent, Editor& editor) :
 	wxDialog(parent, wxID_ANY, "Towns", wxDefaultPosition, wxSize(280, 330)),
-	editor(editor) {
+	editor(editor)
+{
 	Map& map = editor.map;
 
 	// Create topsizer
@@ -1365,7 +1366,7 @@ EditTownsDialog::EditTownsDialog(wxWindow* parent, Editor& editor) :
 	tmpsizer->Add(remove_button = newd wxButton(this, EDIT_TOWNS_REMOVE, "Remove"), 0, wxRIGHT | wxTOP, 5);
 	sizer->Add(tmpsizer, 0, wxEXPAND | wxLEFT | wxRIGHT, 10);
 
-	// House options
+	// House options - town name and ID
 	tmpsizer = newd wxStaticBoxSizer(wxHORIZONTAL, this, "Name / ID");
 	name_field = newd wxTextCtrl(this, wxID_ANY, "", wxDefaultPosition, wxSize(190, 20), 0, wxTextValidator(wxFILTER_ASCII, &town_name));
 	tmpsizer->Add(name_field, 2, wxEXPAND | wxLEFT | wxBOTTOM, 5);
@@ -1375,11 +1376,21 @@ EditTownsDialog::EditTownsDialog(wxWindow* parent, Editor& editor) :
 	tmpsizer->Add(id_field, 1, wxEXPAND | wxLEFT | wxRIGHT | wxBOTTOM, 5);
 	sizer->Add(tmpsizer, 0, wxEXPAND | wxALL, 10);
 
-	// Temple position
+	// Temple position section
+	// Create the PositionCtrl for temple position entry.
+	// Note: PositionCtrl is a sizer so we cannot bind events directly to it.
 	temple_position = newd PositionCtrl(this, "Temple Position", 0, 0, 0, map.getWidth(), map.getHeight());
 	select_position_button = newd wxButton(this, EDIT_TOWNS_SELECT_TEMPLE, "Go To");
 	temple_position->Add(select_position_button, 0, wxLEFT | wxRIGHT | wxBOTTOM, 5);
 	sizer->Add(temple_position, 0, wxEXPAND | wxLEFT | wxRIGHT, 10);
+
+	// --- New: Extra text control for seamless temple position pasting ---
+	// This control accepts a full position string (in any supported format) and updates the temple position fields.
+	paste_temple_field = newd wxTextCtrl(this, wxID_ANY, "", wxDefaultPosition, wxSize(200, -1), wxTE_PROCESS_ENTER);
+	paste_temple_field->SetHint("Paste temple position (e.g., {x = 0, y = 0, z = 0})");
+	paste_temple_field->Bind(wxEVT_TEXT, &EditTownsDialog::OnPasteTempleText, this);
+	sizer->Add(paste_temple_field, 0, wxEXPAND | wxALL, 5);
+	// --- End new section ---
 
 	// OK/Cancel buttons
 	tmpsizer = newd wxBoxSizer(wxHORIZONTAL);
@@ -1648,6 +1659,20 @@ void EditTownsDialog::OnClickOK(wxCommandEvent& WXUNUSED(event)) {
 void EditTownsDialog::OnClickCancel(wxCommandEvent& WXUNUSED(event)) {
 	// Just close this window
 	EndModal(0);
+}
+
+void EditTownsDialog::OnPasteTempleText(wxCommandEvent& event) {
+	Position pos;
+	// Retrieve pasted text from the additional paste field.
+	std::string input = paste_temple_field->GetValue().ToStdString();
+	// Attempt to parse input using supported position formats.
+	if(posFromClipboard(pos, editor.map.getWidth(), editor.map.getHeight(), input)) {
+		// Successfully parsed position; update the temple position fields.
+		temple_position->SetPosition(pos);
+		// Optionally, clear the paste field after successful parsing.
+		paste_temple_field->Clear();
+	}
+	event.Skip();
 }
 
 // ============================================================================
