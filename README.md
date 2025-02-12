@@ -10,6 +10,8 @@ https://discord.gg/sdxUJJdFzC
 Rookgaard Independence
 https://discord.gg/CavZvnvRey
 
+Rangers Arcani
+https://discord.gg/Wp5wZcCczu
 
 This is a map editor for game servers that derivied from [OpenTibia](https://github.com/opentibia/server) server project.
 
