@@ -188,6 +188,7 @@ GUI::GUI() :
 	aui_manager(nullptr),
 	root(nullptr),
 	minimap(nullptr),
+	minimap_enabled(false),
 	gem(nullptr),
 	search_result_window(nullptr),
 	secondary_map(nullptr),
@@ -443,6 +444,7 @@ void GUI::CycleTab(bool forward) {
 }
 
 bool GUI::LoadDataFiles(wxString& error, wxArrayString& warnings) {
+	minimap_enabled = false;
 	FileName data_path = getLoadedVersion()->getDataPath();
 	FileName client_path = getLoadedVersion()->getClientPath();
 	FileName extension_path = GetExtensionsDirectory();
@@ -1114,14 +1116,36 @@ void GUI::CreateMinimap() {
 		return;
 	}
 
-	if (minimap) {
-		aui_manager->GetPane(minimap).Show(true);
+	if (minimap_enabled) {
+		DestroyMinimap();
+		minimap_enabled = false;
 	} else {
-		minimap = newd MinimapWindow(root);
-		minimap->Show(true);
-		aui_manager->AddPane(minimap, wxAuiPaneInfo().Caption("Minimap"));
+		if (minimap) {
+			// If minimap exists but is hidden, show it with saved position
+			aui_manager->GetPane(minimap).Show(true);
+			aui_manager->GetPane(minimap).Float();
+			aui_manager->GetPane(minimap).FloatingSize(wxSize(640, 320));
+		} else {
+			// Create new minimap with default size
+			minimap = newd MinimapWindow(root);
+			minimap->SetSize(wxSize(640, 320));
+			minimap->Show(true);
+			
+			// Add as floating pane with fixed size
+			wxAuiPaneInfo paneInfo;
+			paneInfo.Caption("Minimap")
+					.Float()
+					.FloatingSize(wxSize(640, 320))
+					.Floatable(true)
+					.Movable(true)
+					.Dockable(false)
+					.DestroyOnClose(false);
+					
+			aui_manager->AddPane(minimap, paneInfo);
+		}
+		minimap_enabled = true;
+		aui_manager->Update();
 	}
-	aui_manager->Update();
 }
 
 void GUI::HideMinimap() {
@@ -1137,6 +1161,7 @@ void GUI::DestroyMinimap() {
 		aui_manager->Update();
 		minimap->Destroy();
 		minimap = nullptr;
+		minimap_enabled = false;
 	}
 }
 

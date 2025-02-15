@@ -487,85 +487,79 @@ SpawnList Map::getSpawnList(Tile* where) {
 	return list;
 }
 
-bool Map::exportMinimap(FileName filename, int floor /*= GROUND_LAYER*/, bool displaydialog) {
+bool Map::exportMinimap(FileName filename, int floor, bool displaydialog) {
 	uint8_t* pic = nullptr;
 
 	try {
+		// Find the actual bounds of used tiles
 		int min_x = 0x10000, min_y = 0x10000;
 		int max_x = 0x00000, max_y = 0x00000;
+		bool found_tiles = false;
 
-		if (size() == 0) {
+		for (MapIterator mit = begin(); mit != end(); ++mit) {
+			if ((*mit)->get() == nullptr || (*mit)->empty() || (*mit)->getZ() != floor) {
+				continue;
+			}
+
+			found_tiles = true;
+			Position pos = (*mit)->getPosition();
+
+			min_x = std::min(min_x, pos.x);
+			min_y = std::min(min_y, pos.y);
+			max_x = std::max(max_x, pos.x);
+			max_y = std::max(max_y, pos.y);
+		}
+
+		if (!found_tiles) {
 			return true;
 		}
 
-		for (MapIterator mit = begin(); mit != end(); ++mit) {
-			if ((*mit)->get() == nullptr || (*mit)->empty()) {
-				continue;
-			}
+		// Add padding of 10 tiles
+		min_x = std::max(0, min_x - 10);
+		min_y = std::max(0, min_y - 10);
+		max_x = std::min(65535, max_x + 10);
+		max_y = std::min(65535, max_y + 10);
 
-			Position pos = (*mit)->getPosition();
-
-			if (pos.x < min_x) {
-				min_x = pos.x;
-			}
-
-			if (pos.y < min_y) {
-				min_y = pos.y;
-			}
-
-			if (pos.x > max_x) {
-				max_x = pos.x;
-			}
-
-			if (pos.y > max_y) {
-				max_y = pos.y;
-			}
-		}
-
+		// Calculate dimensions
 		int minimap_width = max_x - min_x + 1;
 		int minimap_height = max_y - min_y + 1;
 
-		pic = newd uint8_t[minimap_width * minimap_height]; // 1 byte per pixel
-
+		// Allocate memory for the bitmap
+		pic = newd uint8_t[minimap_width * minimap_height];
 		memset(pic, 0, minimap_width * minimap_height);
 
-		int tiles_iterated = 0;
+		// Fill the bitmap
 		for (MapIterator mit = begin(); mit != end(); ++mit) {
 			Tile* tile = (*mit)->get();
-			++tiles_iterated;
-			if (tiles_iterated % 8192 == 0 && displaydialog) {
-				g_gui.SetLoadDone(int(tiles_iterated / double(tilecount) * 90.0));
-			}
-
-			if (tile->empty() || tile->getZ() != floor) {
+			if (!tile || tile->empty() || tile->getZ() != floor) {
 				continue;
 			}
 
-			// std::cout << "Pixel : " << (tile->getY() - min_y) * width + (tile->getX() - min_x) << std::endl;
 			uint32_t pixelpos = (tile->getY() - min_y) * minimap_width + (tile->getX() - min_x);
 			uint8_t& pixel = pic[pixelpos];
 
-			for (ItemVector::const_reverse_iterator item_iter = tile->items.rbegin(); item_iter != tile->items.rend(); ++item_iter) {
+			// Get color from items
+			for (ItemVector::const_reverse_iterator item_iter = tile->items.rbegin(); 
+				 item_iter != tile->items.rend(); ++item_iter) {
 				if ((*item_iter)->getMiniMapColor()) {
 					pixel = (*item_iter)->getMiniMapColor();
 					break;
 				}
 			}
-			if (pixel == 0) {
-				// check ground too
-				if (tile->hasGround()) {
-					pixel = tile->ground->getMiniMapColor();
-				}
+
+			// If no item color, check ground
+			if (pixel == 0 && tile->hasGround()) {
+				pixel = tile->ground->getMiniMapColor();
 			}
 		}
 
-		// Create a file for writing
+		// Write to file
 		FileWriteHandle fh(nstr(filename.GetFullPath()));
-
 		if (!fh.isOpen()) {
 			delete[] pic;
 			return false;
 		}
+
 		// Store the magic number
 		fh.addRAW("BM");
 
@@ -631,13 +625,11 @@ bool Map::exportMinimap(FileName filename, int floor /*= GROUND_LAYER*/, bool di
 		}
 
 		delete[] pic;
-		// fclose(file);
-		fh.close();
+		return true;
 	} catch (...) {
 		delete[] pic;
+		throw;
 	}
-
-	return true;
 }
 
 uint32_t Map::cleanDuplicateItems(const std::vector<std::pair<uint16_t, uint16_t>>& ranges, const PropertyFlags& flags) {

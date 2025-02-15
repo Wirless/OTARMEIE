@@ -479,6 +479,9 @@ protected:
 
 public:
 	int GetHotkeyEventId(const std::string& action);
+
+	// Add after line 395 (public members section)
+	bool minimap_enabled;
 };
 
 extern GUI g_gui;
