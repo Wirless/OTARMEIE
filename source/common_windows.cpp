@@ -1544,71 +1544,93 @@ void EditTownsDialog::OnClickAdd(wxCommandEvent& WXUNUSED(event)) {
 }
 
 void EditTownsDialog::OnClickRemove(wxCommandEvent& WXUNUSED(event)) {
-	int selection_index = town_listbox->GetSelection();
-	if (selection_index == wxNOT_FOUND) {
-		return;
-	}
+    int selection_index = town_listbox->GetSelection();
+    OutputDebugStringA(wxString::Format("Selected index: %d\n", selection_index).c_str());
 
-	// Get the selected town
-	Town* town = town_list[selection_index];
-	if (!town) {
-		return;
-	}
+    if (selection_index == wxNOT_FOUND) {
+        OutputDebugStringA("No selection found\n");
+        return;
+    }
 
-	// Count houses in this town
-	int house_count = 0;
-	for (HouseMap::iterator house_iter = editor.map.houses.begin(); 
-		 house_iter != editor.map.houses.end(); ++house_iter) {
-		if (house_iter->second->townid == town->getID()) {
-			house_count++;
-		}
-	}
+    // Get the selected town directly from the list
+    Town* town = town_list[selection_index];
+    OutputDebugStringA(wxString::Format("Selected town ID: %d, Name: %s\n", 
+        town->getID(), wxstr(town->getName()).c_str()).c_str());
 
-	if (house_count > 0) {
-		// First modal: Inform about house removal
-		wxString msg;
-		msg << "This town has " << house_count << " house" << (house_count > 1 ? "s" : "") 
-			<< " that will be removed.\n\nDo you want to remove the houses?";
-		
-		int ret = g_gui.PopupDialog(this, "Remove Houses", msg, wxYES | wxNO);
-		
-		if (ret == wxID_NO) {
-			return;
-		}
+    if (!town) {
+        OutputDebugStringA("Town not found\n");
+        return;
+    }
 
-		// Remove all houses belonging to this town
-		HouseMap::iterator house_iter = editor.map.houses.begin();
-		while (house_iter != editor.map.houses.end()) {
-			if (house_iter->second->townid == town->getID()) {
-				House* house = house_iter->second;
-				house->clean();
-				editor.map.houses.removeHouse(house);
-				house_iter = editor.map.houses.begin();
-			} else {
-				++house_iter;
-			}
-		}
-	}
+    // Count houses in this town
+    int house_count = 0;
+    for (HouseMap::iterator house_iter = editor.map.houses.begin(); 
+         house_iter != editor.map.houses.end(); ++house_iter) {
+        if (house_iter->second->townid == town->getID()) {
+            house_count++;
+        }
+    }
+    OutputDebugStringA(wxString::Format("Houses in town: %d\n", house_count).c_str());
 
-	// Second modal: Confirm town removal
-	wxString confirm_msg;
-	confirm_msg << "Do you want to remove the town '" << wxstr(town->getName()) << "'?";
-	int town_ret = g_gui.PopupDialog(this, "Remove Town", confirm_msg, wxYES | wxNO);
-	
-	if (town_ret == wxID_NO) {
-		return;
-	}
+    if (house_count > 0) {
+        // House removal code...
+        OutputDebugStringA("Removing houses...\n");
+        HouseMap::iterator house_iter = editor.map.houses.begin();
+        while (house_iter != editor.map.houses.end()) {
+            if (house_iter->second->townid == town->getID()) {
+                
+                House* house = house_iter->second;
+                house->clean();
+                editor.map.houses.removeHouse(house);
+                house_iter = editor.map.houses.begin();
+            } else {
+                ++house_iter;
+            }
+        }
+    }
 
-	// Remove town flag from tile
-	editor.map.getOrCreateTile(town->getTemplePosition())->getLocation()->decreaseTownCount();
+    // Store the ID before removal
+    uint32_t removed_id = town->getID();
+    OutputDebugStringA(wxString::Format("About to remove town ID: %d\n", removed_id).c_str());
 
-	// Remove the town
-	delete town;
-	town_list.erase(town_list.begin() + selection_index);
+    // Remove town flag from tile
+    editor.map.getOrCreateTile(town->getTemplePosition())->getLocation()->decreaseTownCount();
 
-	// Update UI
-	BuildListBox(false);
-	UpdateSelection(selection_index - 1);
+    // Before removal, print the list
+    OutputDebugStringA("Towns before removal:\n");
+    for (size_t i = 0; i < town_list.size(); i++) {
+        OutputDebugStringA(wxString::Format("Index %zu: ID %d, Name %s\n", 
+            i, town_list[i]->getID(), wxstr(town_list[i]->getName()).c_str()).c_str());
+    }
+
+    // Remove the town
+    town_list.erase(town_list.begin() + selection_index);
+    delete town;
+
+    // After removal, print the list
+    OutputDebugStringA("Towns after removal:\n");
+    for (size_t i = 0; i < town_list.size(); i++) {
+        OutputDebugStringA(wxString::Format("Index %zu: ID %d, Name %s\n", 
+            i, town_list[i]->getID(), wxstr(town_list[i]->getName()).c_str()).c_str());
+    }
+
+    // Reindex remaining towns
+    for (size_t i = 0; i < town_list.size(); i++) {
+        Town* remaining_town = town_list[i];
+        uint32_t new_id = i + 1;
+        OutputDebugStringA(wxString::Format("Reindexing town: Old ID %d to New ID %d\n", 
+            remaining_town->getID(), new_id).c_str());
+        
+        if (remaining_town->getID() != new_id) {
+            remaining_town->setID(new_id);
+        }
+    }
+
+    max_town_id = town_list.size();
+    OutputDebugStringA(wxString::Format("New max_town_id: %d\n", max_town_id).c_str());
+
+    BuildListBox(false);
+    UpdateSelection(selection_index - 1);
 }
 
 void EditTownsDialog::OnClickOK(wxCommandEvent& WXUNUSED(event)) {
