@@ -479,6 +479,10 @@ protected:
 
 public:
 	int GetHotkeyEventId(const std::string& action);
+
+private:
+	std::unique_ptr<MapRenderPool> render_pool;
+	std::unique_ptr<GLBatchRenderer> batch_renderer;
 };
 
 extern GUI g_gui;

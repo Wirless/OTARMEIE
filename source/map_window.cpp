@@ -21,11 +21,18 @@
 #include "gui.h"
 #include "sprites.h"
 #include "editor.h"
+#include "render/debug_renderer.h"
+
+BEGIN_EVENT_TABLE(MapWindow, wxPanel)
+	EVT_SIZE(MapWindow::OnSize)
+	EVT_SCROLL(MapWindow::OnScroll)
+END_EVENT_TABLE()
 
 MapWindow::MapWindow(wxWindow* parent, Editor& editor) :
 	wxPanel(parent, PANE_MAIN),
 	editor(editor),
-	replaceItemsDialog(nullptr) {
+	replaceItemsDialog(nullptr),
+	render_pool(std::make_unique<MapRenderPool>()) {
 	int GL_settings[3];
 	GL_settings[0] = WX_GL_RGBA;
 	GL_settings[1] = WX_GL_DOUBLEBUFFER;
@@ -48,6 +55,12 @@ MapWindow::MapWindow(wxWindow* parent, Editor& editor) :
 	topsizer->Add(gem, wxSizerFlags(1));
 
 	SetSizerAndFit(topsizer);
+
+	// Initialize viewport
+	UpdateViewport();
+	
+	// Initial segment creation
+	UpdateVisibleSegments();
 }
 
 MapWindow::~MapWindow() {
@@ -221,4 +234,74 @@ void MapWindow::OnScrollPageUp(wxScrollEvent& event) {
 		ScrollRelative(0, -5 * 96);
 	}
 	Refresh();
+}
+
+void MapWindow::UpdateViewport() {
+	// Get current view information from editor
+	int center_x, center_y;
+	g_gui.GetCurrentMapTab()->GetCanvas()->GetScreenCenter(&center_x, &center_y);
+	
+	current_viewport.floor = g_gui.GetCurrentFloor();
+	current_viewport.start_x = (center_x - GetSize().GetWidth() / 2) / MapRenderPool::SEGMENT_SIZE;
+	current_viewport.start_y = (center_y - GetSize().GetHeight() / 2) / MapRenderPool::SEGMENT_SIZE;
+	current_viewport.end_x = (center_x + GetSize().GetWidth() / 2) / MapRenderPool::SEGMENT_SIZE + 1;
+	current_viewport.end_y = (center_y + GetSize().GetHeight() / 2) / MapRenderPool::SEGMENT_SIZE + 1;
+}
+
+void MapWindow::UpdateVisibleSegments() {
+	visible_segments.clear();
+	
+	for(int y = current_viewport.start_y; y <= current_viewport.end_y; ++y) {
+		for(int x = current_viewport.start_x; x <= current_viewport.end_x; ++x) {
+			auto segment = render_pool->CreateSegment(x, y, current_viewport.floor);
+			segment->is_visible = true;
+			visible_segments.push_back(segment);
+		}
+	}
+	
+	QueueVisibleSegments();
+}
+
+void MapWindow::QueueVisibleSegments() {
+	for(auto& segment : visible_segments) {
+		if(segment->is_dirty) {
+			RenderTask task;
+			task.segment = segment;
+			task.priority = segment->is_visible ? 1 : 0;
+			task.render_func = [this](RenderSegment& seg) {
+				// Render the segment using the editor's tile data
+				RenderSegmentTiles(seg);
+			};
+			render_pool->QueueRenderTask(task);
+		}
+	}
+}
+
+void MapWindow::RenderSegmentTiles(RenderSegment& segment) {
+	// Create a bitmap for this segment
+	wxBitmap bitmap(MapRenderPool::SEGMENT_SIZE, MapRenderPool::SEGMENT_SIZE);
+	wxMemoryDC dc(bitmap);
+	
+	// Render all tiles in this segment
+	for(int y = segment.start_y; y < segment.end_y; ++y) {
+		for(int x = segment.start_x; x < segment.end_x; ++x) {
+			Tile* tile = editor.map.getTile(x, y, segment.floor);
+			if(tile) {
+				g_gui.GetCurrentMapTab()->GetCanvas()->DrawTile(&dc, tile);
+			}
+		}
+	}
+	
+	// Add debug visualization
+	DebugRenderer::DrawSegmentDebug(dc, segment, segment.in_cache);
+	
+	segment.buffer = std::make_shared<wxBitmap>(bitmap);
+	segment.is_dirty = false;
+}
+
+void MapWindow::OnPaint(wxPaintEvent& event) {
+	wxPaintDC dc(this);
+	
+	// Draw performance metrics in top-left corner
+	DebugRenderer::DrawPerformanceMetrics(dc, wxPoint(10, 10));
 }

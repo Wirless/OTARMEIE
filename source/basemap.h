@@ -15,6 +15,97 @@
 // along with this program. If not, see <http://www.gnu.org/licenses/>.
 //////////////////////////////////////////////////////////////////////
 
+
+/*
+=================================================================================================
+MULTI-THREADED MAP RENDERING OPTIMIZATION TASK
+=================================================================================================
+
+OBJECTIVE:
+Optimize the map rendering system in Remere's Map Editor for multi-threaded performance while 
+maintaining OpenGL context safety and preventing race conditions.
+
+KEY COMPONENTS AND TASKS:
+------------------------
+
+1. THREAD POOL MANAGEMENT
+- Implement a dedicated MapRenderThreadPool class to manage worker threads
+- Create thread-safe task queue for render segments
+- Ensure proper thread lifecycle management and cleanup
+- Handle OpenGL context sharing between threads
+- Implement priority-based task scheduling
+
+2. TILE RENDERING SEGMENTATION
+- Divide visible map area into render segments (configurable size, default 96x96 tiles)
+- Implement segment-based dirty region tracking
+- Create efficient tile batching system for each segment
+- Maintain render order for proper transparency handling
+- Cache rendered segments for reuse
+
+3. MEMORY MANAGEMENT AND SAFETY
+- Implement thread-safe tile access mechanisms
+- Create tile data caching system with read-write locks
+- Optimize memory allocation patterns for multi-threaded access
+- Implement memory pooling for frequently accessed tile data
+- Ensure proper synchronization of shared resources
+
+4. RENDER PIPELINE OPTIMIZATION
+- Create segment-based render queue
+- Implement priority system for visible segments
+- Handle dynamic updates during scrolling/zooming
+- Maintain OpenGL state consistency across threads
+- Implement efficient texture batching
+
+5. MINIMAP INTEGRATION
+- Separate minimap rendering into dedicated thread
+- Implement async minimap updates
+- Create efficient data sharing between main render and minimap
+- Optimize minimap memory usage
+- Handle minimap cache invalidation
+
+6. PERFORMANCE MONITORING
+- Add performance metrics collection
+- Track render times per segment
+- Monitor thread utilization
+- Implement debug visualization for segment rendering
+- Create performance logging system
+
+TECHNICAL CONSIDERATIONS:
+------------------------
+- OpenGL Context: Ensure proper context sharing and state management
+- Memory Safety: Implement proper synchronization for shared resources
+- Cache Coherency: Optimize data layout for cache-friendly access
+- Thread Communication: Minimize inter-thread communication overhead
+- State Management: Maintain consistent render state across threads
+
+IMPLEMENTATION APPROACH:
+-----------------------
+1. Create base infrastructure (thread pool, task queue)
+2. Implement segment management system
+3. Add thread-safe memory management
+4. Integrate with existing render pipeline
+5. Optimize and tune performance
+6. Add monitoring and debugging tools
+
+PERFORMANCE TARGETS:
+-------------------
+- Maintain 60+ FPS for normal map viewing
+- Support efficient rendering of large maps (8000x8000+ tiles)
+- Minimize memory overhead from multi-threading
+- Reduce CPU usage during idle states
+- Optimize memory bandwidth usage
+
+COMPATIBILITY REQUIREMENTS:
+-------------------------
+- Maintain compatibility with existing brush system
+- Preserve all current rendering features
+- Support all existing map operations
+- Maintain backward compatibility with saved maps
+- Support all current view options
+
+=================================================================================================
+*/
+
 #ifndef RME_BASE_MAP_H_
 #define RME_BASE_MAP_H_
 

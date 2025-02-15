@@ -141,4 +141,9 @@ typedef wxFileName FileName;
 	#define FROM_DIP(widget, size) size
 #endif
 
+// Add after other includes
+#include "render/map_render_pool.h"
+#include "render/gl_batch_renderer.h"
+#include "render/debug_renderer.h"
+
 #endif

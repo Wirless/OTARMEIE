@@ -20,6 +20,8 @@
 
 #include "position.h"
 #include "replace_items_window.h"
+#include "render/map_render_pool.h"
+#include <wx/panel.h>
 
 class MapCanvas;
 class DCButton;
@@ -78,6 +80,11 @@ public:
 	void CloseReplaceItemsDialog();
 	void OnReplaceItemsDialogClose(wxCloseEvent& event);
 
+	// Add new methods for render pool integration
+	void UpdateVisibleSegments();
+	void QueueVisibleSegments();
+	void OnRenderComplete(wxCommandEvent& event);
+
 protected:
 	// For internal use, call to resize the scrollbars with
 	// the newd dimensions of *this* window
@@ -94,6 +101,19 @@ protected:
 private:
 	ReplaceItemsDialog* replaceItemsDialog;
 	Position previous_position;
+
+	std::unique_ptr<MapRenderPool> render_pool;
+	std::vector<std::shared_ptr<RenderSegment>> visible_segments;
+	
+	// Viewport tracking
+	struct ViewportInfo {
+		int start_x, start_y;
+		int end_x, end_y;
+		int floor;
+	} current_viewport;
+	
+	void UpdateViewport();
+	void MarkSegmentsDirty(const Position& pos);
 
 	friend class MainFrame;
 	friend class MapCanvas;
