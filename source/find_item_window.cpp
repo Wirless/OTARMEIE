@@ -347,7 +347,7 @@ FindItemDialog::FindItemDialog(wxWindow* parent, const wxString& title, bool onl
 	result_controls_sizer->Add(refresh_button, 0, wxALL, 5);
 
 	// Add auto-refresh checkbox
-	auto_refresh = newd wxCheckBox(result_box_sizer->GetStaticBox(), wxID_ANY, "Auto Refresh");
+	auto_refresh = newd wxCheckBox(result_box_sizer->GetStaticBox(), wxID_ANY, "F5");
 	auto_refresh->SetValue(true); // Enable by default
 	result_controls_sizer->Add(auto_refresh, 0, wxALL | wxALIGN_CENTER_VERTICAL, 5);
 
