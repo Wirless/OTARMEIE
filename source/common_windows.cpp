@@ -34,6 +34,7 @@
 #include "positionctrl.h"
 #include "string_utils.h"
 
+
 #ifdef _MSC_VER
 	#pragma warning(disable : 4018) // signed/unsigned mismatch
 #endif
@@ -1337,10 +1338,12 @@ EVT_BUTTON(EDIT_TOWNS_ADD, EditTownsDialog::OnClickAdd)
 EVT_BUTTON(EDIT_TOWNS_REMOVE, EditTownsDialog::OnClickRemove)
 EVT_BUTTON(wxID_OK, EditTownsDialog::OnClickOK)
 EVT_BUTTON(wxID_CANCEL, EditTownsDialog::OnClickCancel)
+EVT_BUTTON(EDIT_TOWNS_EXPORT, EditTownsDialog::OnClickExport)
+EVT_BUTTON(EDIT_TOWNS_IMPORT, EditTownsDialog::OnClickImport)
 END_EVENT_TABLE()
 
 EditTownsDialog::EditTownsDialog(wxWindow* parent, Editor& editor) :
-	wxDialog(parent, wxID_ANY, "Towns", wxDefaultPosition, wxSize(280, 330)),
+	wxDialog(parent, wxID_ANY, "Towns", wxDefaultPosition, wxSize(280, 380)),
 	editor(editor)
 {
 	Map& map = editor.map;
@@ -1397,6 +1400,12 @@ EditTownsDialog::EditTownsDialog(wxWindow* parent, Editor& editor) :
 	tmpsizer->Add(newd wxButton(this, wxID_OK, "OK"), wxSizerFlags(1).Center());
 	tmpsizer->Add(newd wxButton(this, wxID_CANCEL, "Cancel"), wxSizerFlags(1).Center());
 	sizer->Add(tmpsizer, 0, wxCENTER | wxALL, 10);
+
+	// Add Import/Export buttons
+	wxBoxSizer* importExportSizer = new wxBoxSizer(wxHORIZONTAL);
+	importExportSizer->Add(new wxButton(this, EDIT_TOWNS_IMPORT, "Import XML"), 0, wxRIGHT, 5);
+	importExportSizer->Add(new wxButton(this, EDIT_TOWNS_EXPORT, "Export XML"), 0, wxLEFT, 5);
+	sizer->Add(importExportSizer, 0, wxEXPAND | wxLEFT | wxRIGHT | wxBOTTOM, 10);
 
 	SetSizerAndFit(sizer);
 	Centre(wxBOTH);
@@ -1673,6 +1682,160 @@ void EditTownsDialog::OnPasteTempleText(wxCommandEvent& event) {
 		paste_temple_field->Clear();
 	}
 	event.Skip();
+}
+
+void EditTownsDialog::OnClickExport(wxCommandEvent& WXUNUSED(event)) {
+    int selection = town_listbox->GetSelection();
+    if (selection == wxNOT_FOUND) {
+        g_gui.PopupDialog(this, "Error", "Please select a town to export.", wxOK);
+        return;
+    }
+
+    Town* town = town_list[selection];
+    wxString defaultFileName = wxString::Format("%s.xml", wxstr(town->getName()));
+    
+    wxFileDialog dialog(this, "Export Town to XML", "", defaultFileName,
+        "XML files (*.xml)|*.xml", wxFD_SAVE | wxFD_OVERWRITE_PROMPT);
+    
+    if (dialog.ShowModal() == wxID_OK) {
+        ExportTownToXML(dialog.GetPath(), town);
+    }
+}
+
+void EditTownsDialog::ExportTownToXML(const wxString& path, Town* town) {
+    pugi::xml_document doc;
+    pugi::xml_node root = doc.append_child("town");
+    
+    // Export basic town information.
+    root.append_attribute("id") = town->getID();
+    root.append_attribute("name") = town->getName().c_str();
+    
+    Position temple_pos = town->getTemplePosition();
+    pugi::xml_node temple = root.append_child("temple");
+    temple.append_attribute("x") = temple_pos.x;
+    temple.append_attribute("y") = temple_pos.y;
+    temple.append_attribute("z") = temple_pos.z;
+    
+    // Export houses that belong to the selected town.
+    pugi::xml_node houses = root.append_child("houses");
+    for (HouseMap::iterator house_iter = editor.map.houses.begin(); 
+         house_iter != editor.map.houses.end(); ++house_iter) {
+        House* house = house_iter->second;
+        if (house->townid == town->getID()) {
+            pugi::xml_node house_node = houses.append_child("house");
+            house_node.append_attribute("id") = house->getID();
+            house_node.append_attribute("name") = house->name.c_str();
+            
+            Position exit = house->getExit();
+            pugi::xml_node exit_node = house_node.append_child("exit");
+            exit_node.append_attribute("x") = exit.x;
+            exit_node.append_attribute("y") = exit.y;
+            exit_node.append_attribute("z") = exit.z;
+            
+            // Export all tile positions associated with this house.
+            pugi::xml_node tiles = house_node.append_child("tiles");
+            const auto& tilePositions = house->getTilePositions();
+            for (auto it = tilePositions.begin(); it != tilePositions.end(); ++it) {
+                const Position& pos = *it;
+                pugi::xml_node tile = tiles.append_child("tile");
+                tile.append_attribute("x") = pos.x;
+                tile.append_attribute("y") = pos.y;
+                tile.append_attribute("z") = pos.z;
+            }
+        }
+    }
+    
+    if (!doc.save_file(path.mb_str())) {
+        g_gui.PopupDialog(this, "Error", "Failed to save town XML file.", wxOK);
+    }
+}
+
+void EditTownsDialog::OnClickImport(wxCommandEvent& WXUNUSED(event)) {
+    wxFileDialog dialog(this, "Import Town from XML", "", "",
+        "XML files (*.xml)|*.xml", wxFD_OPEN | wxFD_FILE_MUST_EXIST);
+    
+    if (dialog.ShowModal() == wxID_OK) {
+        ImportTownFromXML(dialog.GetPath());
+    }
+}
+
+void EditTownsDialog::ImportTownFromXML(const wxString& path) {
+    pugi::xml_document doc;
+    if (!doc.load_file(path.mb_str())) {
+        g_gui.PopupDialog(this, "Error", "Failed to load town XML file.", wxOK);
+        return;
+    }
+    
+    pugi::xml_node root = doc.child("town");
+    if (!root) {
+        g_gui.PopupDialog(this, "Error", "Invalid town XML format.", wxOK);
+        return;
+    }
+    
+    // Create new town with next available ID
+    uint32_t new_town_id = editor.map.towns.getEmptyID();
+    Town* new_town = new Town(new_town_id);
+    
+    new_town->setName(root.attribute("name").as_string());
+    
+    pugi::xml_node temple = root.child("temple");
+    if (temple) {
+        Position temple_pos(
+            temple.attribute("x").as_int(),
+            temple.attribute("y").as_int(),
+            temple.attribute("z").as_int()
+        );
+        new_town->setTemplePosition(temple_pos);
+    }
+    
+    // Import houses
+    pugi::xml_node houses = root.child("houses");
+    if (houses) {
+        for (pugi::xml_node house_node = houses.child("house"); 
+             house_node; house_node = house_node.next_sibling("house")) {
+            
+            uint32_t new_house_id = editor.map.houses.getEmptyID();
+            House* new_house = newd House(editor.map);
+            new_house->setID(new_house_id);
+            new_house->townid = new_town_id;
+            new_house->name = house_node.attribute("name").as_string();
+            
+            pugi::xml_node exit = house_node.child("exit");
+            if (exit) {
+                Position exit_pos(
+                    exit.attribute("x").as_int(),
+                    exit.attribute("y").as_int(),
+                    exit.attribute("z").as_int()
+                );
+                new_house->setExit(exit_pos);
+            }
+            
+            // Import house tiles
+            pugi::xml_node tiles = house_node.child("tiles");
+            for (pugi::xml_node tile = tiles.child("tile"); 
+                 tile; tile = tile.next_sibling("tile")) {
+                Position pos(
+                    tile.attribute("x").as_int(),
+                    tile.attribute("y").as_int(),
+                    tile.attribute("z").as_int()
+                );
+                Tile* map_tile = editor.map.getOrCreateTile(pos);
+                if (map_tile) {
+                    new_house->addTile(map_tile);
+                }
+            }
+            
+            editor.map.houses.addHouse(new_house);
+        }
+    }
+    
+    // Add town to map and update UI
+    town_list.push_back(new_town);
+    editor.map.towns.addTown(new_town);
+    max_town_id = std::max(max_town_id, new_town_id);
+    
+    BuildListBox(true);
+    UpdateSelection(town_list.size() - 1);
 }
 
 // ============================================================================

@@ -336,10 +336,16 @@ public:
 	void OnClickOK(wxCommandEvent&);
 	void OnClickCancel(wxCommandEvent&);
 	void OnPasteTempleText(wxCommandEvent&);
+	void OnClickImport(wxCommandEvent&);
+	void OnClickExport(wxCommandEvent&);
 
 protected:
 	void BuildListBox(bool doselect);
 	void UpdateSelection(int new_selection);
+	void ExportTownsToXML(const wxString& path);
+	void ImportTownsFromXML(const wxString& path);
+	void ExportTownToXML(const wxString& path, Town* town);
+	void ImportTownFromXML(const wxString& path);
 
 	Editor& editor;
 
@@ -360,5 +366,7 @@ protected:
 
 	DECLARE_EVENT_TABLE();
 };
+
+
 
 #endif

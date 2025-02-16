@@ -252,48 +252,6 @@ FindItemDialog::FindItemDialog(wxWindow* parent, const wxString& title, bool onl
 		checkbox->SetToolTip(tooltip);
 	}
 
-	// Add new slot type checkboxes
-	slot_head = newd wxCheckBox(properties_box_sizer->GetStaticBox(), wxID_ANY, "Head Slot", 
-		wxDefaultPosition, wxDefaultSize, wxCHK_3STATE | wxCHK_ALLOW_3RD_STATE_FOR_USER);
-	properties_box_sizer->Add(slot_head, 0, wxALL, 5);
-
-	slot_necklace = newd wxCheckBox(properties_box_sizer->GetStaticBox(), wxID_ANY, "Necklace Slot", 
-		wxDefaultPosition, wxDefaultSize, wxCHK_3STATE | wxCHK_ALLOW_3RD_STATE_FOR_USER);
-	properties_box_sizer->Add(slot_necklace, 0, wxALL, 5);
-
-	slot_backpack = newd wxCheckBox(properties_box_sizer->GetStaticBox(), wxID_ANY, "Backpack Slot", 
-		wxDefaultPosition, wxDefaultSize, wxCHK_3STATE | wxCHK_ALLOW_3RD_STATE_FOR_USER);
-	properties_box_sizer->Add(slot_backpack, 0, wxALL, 5);
-
-	slot_armor = newd wxCheckBox(properties_box_sizer->GetStaticBox(), wxID_ANY, "Armor Slot", 
-		wxDefaultPosition, wxDefaultSize, wxCHK_3STATE | wxCHK_ALLOW_3RD_STATE_FOR_USER);
-	properties_box_sizer->Add(slot_armor, 0, wxALL, 5);
-
-	slot_legs = newd wxCheckBox(properties_box_sizer->GetStaticBox(), wxID_ANY, "Legs Slot", 
-		wxDefaultPosition, wxDefaultSize, wxCHK_3STATE | wxCHK_ALLOW_3RD_STATE_FOR_USER);
-	properties_box_sizer->Add(slot_legs, 0, wxALL, 5);
-
-	slot_feet = newd wxCheckBox(properties_box_sizer->GetStaticBox(), wxID_ANY, "Feet Slot", 
-		wxDefaultPosition, wxDefaultSize, wxCHK_3STATE | wxCHK_ALLOW_3RD_STATE_FOR_USER);
-	properties_box_sizer->Add(slot_feet, 0, wxALL, 5);
-
-	slot_ring = newd wxCheckBox(properties_box_sizer->GetStaticBox(), wxID_ANY, "Ring Slot", 
-		wxDefaultPosition, wxDefaultSize, wxCHK_3STATE | wxCHK_ALLOW_3RD_STATE_FOR_USER);
-	properties_box_sizer->Add(slot_ring, 0, wxALL, 5);
-
-	slot_ammo = newd wxCheckBox(properties_box_sizer->GetStaticBox(), wxID_ANY, "Ammo Slot", 
-		wxDefaultPosition, wxDefaultSize, wxCHK_3STATE | wxCHK_ALLOW_3RD_STATE_FOR_USER);
-	properties_box_sizer->Add(slot_ammo, 0, wxALL, 5);
-
-	// Add the new checkboxes to the tooltip array
-	for(wxCheckBox* checkbox : {unpassable, unmovable, block_missiles, block_pathfinder, 
-		readable, writeable, pickupable, stackable, rotatable, hangable, hook_east, 
-		hook_south, has_elevation, ignore_look, floor_change, has_light, 
-		slot_head, slot_necklace, slot_backpack, slot_armor, slot_legs, 
-		slot_feet, slot_ring, slot_ammo}) {
-		checkbox->SetToolTip(tooltip);
-	}
-
 	box_sizer->Add(properties_box_sizer, 1, wxALL | wxEXPAND, 5);
 
 	// --------------- Items list ---------------
@@ -306,11 +264,6 @@ FindItemDialog::FindItemDialog(wxWindow* parent, const wxString& title, bool onl
 	// Add refresh button
 	refresh_button = newd wxButton(result_box_sizer->GetStaticBox(), wxID_ANY, "Refresh", wxDefaultPosition, wxDefaultSize);
 	result_controls_sizer->Add(refresh_button, 0, wxALL, 5);
-
-	// Add auto-refresh checkbox
-	auto_refresh = newd wxCheckBox(result_box_sizer->GetStaticBox(), wxID_ANY, "Auto Refresh");
-	auto_refresh->SetValue(true); // Enable by default
-	result_controls_sizer->Add(auto_refresh, 0, wxALL | wxALIGN_CENTER_VERTICAL, 5);
 
 	// Add replace size control
 	result_controls_sizer->Add(newd wxStaticText(result_box_sizer->GetStaticBox(), wxID_ANY, "Max Results:"), 0, wxALL | wxALIGN_CENTER_VERTICAL, 5);
@@ -357,14 +310,6 @@ FindItemDialog::FindItemDialog(wxWindow* parent, const wxString& title, bool onl
 	floor_change->Connect(wxEVT_COMMAND_CHECKBOX_CLICKED, wxCommandEventHandler(FindItemDialog::OnPropertyChange), NULL, this);
 	invalid_item->Connect(wxEVT_COMMAND_CHECKBOX_CLICKED, wxCommandEventHandler(FindItemDialog::OnPropertyChange), NULL, this);
 	has_light->Connect(wxEVT_COMMAND_CHECKBOX_CLICKED, wxCommandEventHandler(FindItemDialog::OnPropertyChange), NULL, this);
-	slot_head->Connect(wxEVT_COMMAND_CHECKBOX_CLICKED, wxCommandEventHandler(FindItemDialog::OnPropertyChange), NULL, this);
-	slot_necklace->Connect(wxEVT_COMMAND_CHECKBOX_CLICKED, wxCommandEventHandler(FindItemDialog::OnPropertyChange), NULL, this);
-	slot_backpack->Connect(wxEVT_COMMAND_CHECKBOX_CLICKED, wxCommandEventHandler(FindItemDialog::OnPropertyChange), NULL, this);
-	slot_armor->Connect(wxEVT_COMMAND_CHECKBOX_CLICKED, wxCommandEventHandler(FindItemDialog::OnPropertyChange), NULL, this);
-	slot_legs->Connect(wxEVT_COMMAND_CHECKBOX_CLICKED, wxCommandEventHandler(FindItemDialog::OnPropertyChange), NULL, this);
-	slot_feet->Connect(wxEVT_COMMAND_CHECKBOX_CLICKED, wxCommandEventHandler(FindItemDialog::OnPropertyChange), NULL, this);
-	slot_ring->Connect(wxEVT_COMMAND_CHECKBOX_CLICKED, wxCommandEventHandler(FindItemDialog::OnPropertyChange), NULL, this);
-	slot_ammo->Connect(wxEVT_COMMAND_CHECKBOX_CLICKED, wxCommandEventHandler(FindItemDialog::OnPropertyChange), NULL, this);
 
 	// Connect the refresh button event
 	refresh_button->Connect(wxEVT_BUTTON, wxCommandEventHandler(FindItemDialog::OnRefreshClick), NULL, this);
@@ -398,14 +343,6 @@ FindItemDialog::~FindItemDialog() {
 	ignore_look->Disconnect(wxEVT_COMMAND_CHECKBOX_CLICKED, wxCommandEventHandler(FindItemDialog::OnPropertyChange), NULL, this);
 	floor_change->Disconnect(wxEVT_COMMAND_CHECKBOX_CLICKED, wxCommandEventHandler(FindItemDialog::OnPropertyChange), NULL, this);
 	invalid_item->Disconnect(wxEVT_COMMAND_CHECKBOX_CLICKED, wxCommandEventHandler(FindItemDialog::OnPropertyChange), NULL, this);
-	slot_head->Disconnect(wxEVT_COMMAND_CHECKBOX_CLICKED, wxCommandEventHandler(FindItemDialog::OnPropertyChange), NULL, this);
-	slot_necklace->Disconnect(wxEVT_COMMAND_CHECKBOX_CLICKED, wxCommandEventHandler(FindItemDialog::OnPropertyChange), NULL, this);
-	slot_backpack->Disconnect(wxEVT_COMMAND_CHECKBOX_CLICKED, wxCommandEventHandler(FindItemDialog::OnPropertyChange), NULL, this);
-	slot_armor->Disconnect(wxEVT_COMMAND_CHECKBOX_CLICKED, wxCommandEventHandler(FindItemDialog::OnPropertyChange), NULL, this);
-	slot_legs->Disconnect(wxEVT_COMMAND_CHECKBOX_CLICKED, wxCommandEventHandler(FindItemDialog::OnPropertyChange), NULL, this);
-	slot_feet->Disconnect(wxEVT_COMMAND_CHECKBOX_CLICKED, wxCommandEventHandler(FindItemDialog::OnPropertyChange), NULL, this);
-	slot_ring->Disconnect(wxEVT_COMMAND_CHECKBOX_CLICKED, wxCommandEventHandler(FindItemDialog::OnPropertyChange), NULL, this);
-	slot_ammo->Disconnect(wxEVT_COMMAND_CHECKBOX_CLICKED, wxCommandEventHandler(FindItemDialog::OnPropertyChange), NULL, this);
 
 	// Disconnect the refresh button event
 	refresh_button->Disconnect(wxEVT_BUTTON, wxCommandEventHandler(FindItemDialog::OnRefreshClick), NULL, this);
@@ -467,16 +404,6 @@ void FindItemDialog::EnableProperties(bool enable) {
 	ignore_look->Enable(enable);
 	floor_change->Enable(enable);
 	has_light->Enable(enable);
-	
-	// Add new slot type enables
-	slot_head->Enable(enable);
-	slot_necklace->Enable(enable);
-	slot_backpack->Enable(enable);
-	slot_armor->Enable(enable);
-	slot_legs->Enable(enable);
-	slot_feet->Enable(enable);
-	slot_ring->Enable(enable);
-	slot_ammo->Enable(enable);
 }
 
 void FindItemDialog::RefreshContentsInternal() {
@@ -726,8 +653,7 @@ void FindItemDialog::RefreshContentsInternal() {
 		// Check if any checkbox is not in unchecked state
 		for(wxCheckBox* checkbox : {unpassable, unmovable, block_missiles, block_pathfinder, readable, writeable, 
 			pickupable, stackable, rotatable, hangable, hook_east, hook_south, has_elevation, ignore_look, 
-			floor_change, has_light, slot_head, slot_necklace, slot_backpack, slot_armor, slot_legs, 
-			slot_feet, slot_ring, slot_ammo}) {
+			floor_change, has_light}) {
 			if(checkbox->Get3StateValue() != wxCHK_UNCHECKED) {
 				has_selected = true;
 				break;
@@ -774,23 +700,7 @@ void FindItemDialog::RefreshContentsInternal() {
 					(floor_change->Get3StateValue() == wxCHK_CHECKED && !item.floorChangeDown && !item.floorChangeNorth && !item.floorChangeSouth && !item.floorChangeEast && !item.floorChangeWest) ||
 					(floor_change->Get3StateValue() == wxCHK_UNDETERMINED && (item.floorChangeDown || item.floorChangeNorth || item.floorChangeSouth || item.floorChangeEast || item.floorChangeWest)) ||
 					(has_light->Get3StateValue() == wxCHK_CHECKED && !item.sprite->hasLight()) ||
-					(has_light->Get3StateValue() == wxCHK_UNDETERMINED && item.sprite->hasLight()) ||
-					(slot_head->Get3StateValue() == wxCHK_CHECKED && !(item.slot_position & SLOTP_HEAD)) ||
-					(slot_head->Get3StateValue() == wxCHK_UNDETERMINED && (item.slot_position & SLOTP_HEAD)) ||
-					(slot_necklace->Get3StateValue() == wxCHK_CHECKED && !(item.slot_position & SLOTP_NECKLACE)) ||
-					(slot_necklace->Get3StateValue() == wxCHK_UNDETERMINED && (item.slot_position & SLOTP_NECKLACE)) ||
-					(slot_backpack->Get3StateValue() == wxCHK_CHECKED && !(item.slot_position & SLOTP_BACKPACK)) ||
-					(slot_backpack->Get3StateValue() == wxCHK_UNDETERMINED && (item.slot_position & SLOTP_BACKPACK)) ||
-					(slot_armor->Get3StateValue() == wxCHK_CHECKED && !(item.slot_position & SLOTP_ARMOR)) ||
-					(slot_armor->Get3StateValue() == wxCHK_UNDETERMINED && (item.slot_position & SLOTP_ARMOR)) ||
-					(slot_legs->Get3StateValue() == wxCHK_CHECKED && !(item.slot_position & SLOTP_LEGS)) ||
-					(slot_legs->Get3StateValue() == wxCHK_UNDETERMINED && (item.slot_position & SLOTP_LEGS)) ||
-					(slot_feet->Get3StateValue() == wxCHK_CHECKED && !(item.slot_position & SLOTP_FEET)) ||
-					(slot_feet->Get3StateValue() == wxCHK_UNDETERMINED && (item.slot_position & SLOTP_FEET)) ||
-					(slot_ring->Get3StateValue() == wxCHK_CHECKED && !(item.slot_position & SLOTP_RING)) ||
-					(slot_ring->Get3StateValue() == wxCHK_UNDETERMINED && (item.slot_position & SLOTP_RING)) ||
-					(slot_ammo->Get3StateValue() == wxCHK_CHECKED && !(item.slot_position & SLOTP_AMMO)) ||
-					(slot_ammo->Get3StateValue() == wxCHK_UNDETERMINED && (item.slot_position & SLOTP_AMMO))) {
+					(has_light->Get3StateValue() == wxCHK_UNDETERMINED && item.sprite->hasLight())) {
 					continue;
 				}
 
@@ -815,33 +725,23 @@ void FindItemDialog::OnOptionChange(wxCommandEvent& WXUNUSED(event)) {
 }
 
 void FindItemDialog::OnServerIdChange(wxCommandEvent& WXUNUSED(event)) {
-	if(auto_refresh->GetValue()) {
-		RefreshContentsInternal();
-	}
+	RefreshContentsInternal();
 }
 
 void FindItemDialog::OnClientIdChange(wxCommandEvent& WXUNUSED(event)) {
-	if(auto_refresh->GetValue()) {
-		RefreshContentsInternal();
-	}
+	RefreshContentsInternal();
 }
 
 void FindItemDialog::OnText(wxCommandEvent& WXUNUSED(event)) {
-	if(auto_refresh->GetValue()) {
-		input_timer.Start(800, true);
-	}
+	input_timer.Start(800, true);
 }
 
 void FindItemDialog::OnTypeChange(wxCommandEvent& WXUNUSED(event)) {
-	if(auto_refresh->GetValue()) {
-		RefreshContentsInternal();
-	}
+	RefreshContentsInternal();
 }
 
 void FindItemDialog::OnPropertyChange(wxCommandEvent& WXUNUSED(event)) {
-	if(auto_refresh->GetValue()) {
-		RefreshContentsInternal();
-	}
+	RefreshContentsInternal();
 }
 
 void FindItemDialog::OnInputTimer(wxTimerEvent& WXUNUSED(event)) {

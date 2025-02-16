@@ -121,6 +121,15 @@ protected:
 	wxCheckBox* invalid_item;
 	wxCheckBox* use_range;
 	wxCheckBox* has_light;
+	wxCheckBox* slot_head;
+	wxCheckBox* slot_necklace;
+	wxCheckBox* slot_backpack;
+	wxCheckBox* slot_armor;
+	wxCheckBox* slot_legs;
+	wxCheckBox* slot_feet;
+	wxCheckBox* slot_ring;
+	wxCheckBox* slot_ammo;
+	wxCheckBox* auto_refresh;
 
 	FindDialogListBox* items_list;
 	wxStdDialogButtonSizer* buttons_box_sizer;
