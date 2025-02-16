@@ -94,6 +94,7 @@ protected:
 	void OnRefreshClick(wxCommandEvent& event);
 	void OnReplaceSizeChange(wxCommandEvent& event);
 	void OnClose(wxCloseEvent& event);
+	void OnPropertyRightClick(wxMouseEvent& event);
 
 	wxRadioBox* options_radio_box;
 
