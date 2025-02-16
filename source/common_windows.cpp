@@ -1544,45 +1544,126 @@ void EditTownsDialog::OnClickAdd(wxCommandEvent& WXUNUSED(event)) {
 }
 
 void EditTownsDialog::OnClickRemove(wxCommandEvent& WXUNUSED(event)) {
-	long tmplong;
-	if (id_field->GetValue().ToLong(&tmplong)) {
-		uint32_t old_town_id = tmplong;
+    int current_selection = town_listbox->GetSelection();
+    
+    if (current_selection == wxNOT_FOUND) {
+        return;
+    }
 
-		Town* town = nullptr;
+    // Clear the current selection to prevent interference
+    town_listbox->SetSelection(wxNOT_FOUND);
+    name_field->Clear();
+    id_field->Clear();
+    temple_position->SetPosition(Position(0, 0, 0));
 
-		std::vector<Town*>::iterator town_iter = town_list.begin();
+    // Create and populate choices for the dialog
+    wxArrayString choices;
+    for (size_t i = 0; i < town_list.size(); i++) {
+        wxString choice = wxString::Format("%s (ID: %d)", 
+            wxstr(town_list[i]->getName()).c_str(), 
+            town_list[i]->getID());
+        choices.Add(choice);
+    }
 
-		int selection_index = 0;
-		while (town_iter != town_list.end()) {
-			if (old_town_id == (*town_iter)->getID()) {
-				town = *town_iter;
-				break;
-			}
-			++selection_index;
-			++town_iter;
-		}
-		if (!town) {
-			return;
-		}
+    // Create custom dialog with dropdown
+    wxDialog* dialog = new wxDialog(this, wxID_ANY, "Remove Town", 
+        wxDefaultPosition, wxDefaultSize, wxDEFAULT_DIALOG_STYLE);
+    
+    wxBoxSizer* sizer = new wxBoxSizer(wxVERTICAL);
+    sizer->Add(new wxStaticText(dialog, wxID_ANY, "Select town to remove:"), 
+        0, wxALL, 5);
+    
+    wxChoice* townChoice = new wxChoice(dialog, wxID_ANY, 
+        wxDefaultPosition, wxDefaultSize, choices);
+    townChoice->SetSelection(current_selection);
+    sizer->Add(townChoice, 0, wxEXPAND | wxALL, 5);
+    
+    wxBoxSizer* buttonSizer = new wxBoxSizer(wxHORIZONTAL);
+    buttonSizer->Add(new wxButton(dialog, wxID_OK, "OK"), 0, wxALL, 5);
+    buttonSizer->Add(new wxButton(dialog, wxID_CANCEL, "Cancel"), 0, wxALL, 5);
+    sizer->Add(buttonSizer, 0, wxALIGN_CENTER | wxALL, 5);
+    
+    dialog->SetSizer(sizer);
+    dialog->Fit();
 
-		Map& map = editor.map;
-		for (HouseMap::iterator house_iter = map.houses.begin(); house_iter != map.houses.end(); ++house_iter) {
-			House* house = house_iter->second;
-			if (house->townid == town->getID()) {
-				g_gui.PopupDialog(this, "Error", "You cannot delete a town which still has houses associated with it.", wxOK);
-				return;
-			}
-		}
+    if (dialog->ShowModal() == wxID_OK) {
+        int selected_town_index = townChoice->GetSelection();
+        if (selected_town_index != wxNOT_FOUND) {
+            Town* town_to_remove = town_list[selected_town_index];
+            uint32_t town_id_to_remove = town_to_remove->getID();
+            
+            // Count houses in this town
+            int house_count = 0;
+            for (HouseMap::iterator house_iter = editor.map.houses.begin(); 
+                 house_iter != editor.map.houses.end(); ++house_iter) {
+                if (house_iter->second->townid == town_id_to_remove) {
+                    house_count++;
+                }
+            }
 
-		// remove town flag from tile
-		editor.map.getOrCreateTile(town->getTemplePosition())->getLocation()->decreaseTownCount();
+            if (house_count > 0) {
+                wxString msg;
+                msg << "This town has " << house_count << " house" << (house_count > 1 ? "s" : "") 
+                    << " that will be removed.\n\nDo you want to remove the houses?";
+                
+                if (g_gui.PopupDialog(this, "Remove Houses", msg, wxYES | wxNO) == wxID_NO) {
+                    dialog->Destroy();
+                    UpdateSelection(current_selection);
+                    return;
+                }
 
-		// remove town object
-		delete town;
-		town_list.erase(town_iter);
-		BuildListBox(false);
-		UpdateSelection(selection_index - 1);
-	}
+                // Remove houses
+                HouseMap::iterator house_iter = editor.map.houses.begin();
+                while (house_iter != editor.map.houses.end()) {
+                    if (house_iter->second->townid == town_id_to_remove) {
+                        House* house = house_iter->second;
+                        house->clean();
+                        editor.map.houses.removeHouse(house);
+                        house_iter = editor.map.houses.begin();
+                    } else {
+                        ++house_iter;
+                    }
+                }
+            }
+
+            // Remove town flag from tile
+            editor.map.getOrCreateTile(town_to_remove->getTemplePosition())
+                ->getLocation()->decreaseTownCount();
+
+            // Store old ID and remove the town
+            uint32_t removed_id = town_to_remove->getID();
+            town_list.erase(town_list.begin() + selected_town_index);
+            delete town_to_remove;
+
+            // Reindex remaining towns and update their houses
+            for (size_t i = 0; i < town_list.size(); i++) {
+                Town* remaining_town = town_list[i];
+                if (remaining_town->getID() > removed_id) {
+                    uint32_t new_id = remaining_town->getID() - 1;
+                    // Update houses to point to the new town ID
+                    for (HouseMap::iterator house_iter = editor.map.houses.begin(); 
+                         house_iter != editor.map.houses.end(); ++house_iter) {
+                        if (house_iter->second->townid == remaining_town->getID()) {
+                            house_iter->second->townid = new_id;
+                        }
+                    }
+                    remaining_town->setID(new_id);
+                }
+            }
+
+            max_town_id = town_list.size();
+            BuildListBox(false);
+            
+            if (selected_town_index >= int(town_list.size())) {
+                selected_town_index = town_list.size() - 1;
+            }
+            UpdateSelection(selected_town_index);
+        }
+    } else {
+        UpdateSelection(current_selection);
+    }
+    
+    dialog->Destroy();
 }
 
 void EditTownsDialog::OnClickOK(wxCommandEvent& WXUNUSED(event)) {
