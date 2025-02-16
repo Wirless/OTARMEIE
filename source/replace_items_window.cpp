@@ -194,7 +194,7 @@ void ReplaceItemsListBox::Clear() {
 
 ReplaceItemsDialog::ReplaceItemsDialog(wxWindow* parent, bool selectionOnly) :
 	wxDialog(parent, wxID_ANY, (selectionOnly ? "Replace Items on Selection" : "Replace Items"), 
-		wxDefaultPosition, wxSize(600, 800), wxDEFAULT_DIALOG_STYLE),
+		wxDefaultPosition, wxSize(800, 800), wxDEFAULT_DIALOG_STYLE),
 	selectionOnly(selectionOnly) {
 	SetSizeHints(wxDefaultSize, wxDefaultSize);
 
@@ -212,35 +212,39 @@ ReplaceItemsDialog::ReplaceItemsDialog(wxWindow* parent, bool selectionOnly) :
 	sizer->Add(list_sizer, 1, wxALL | wxEXPAND, 5);
 
 	wxBoxSizer* items_sizer = new wxBoxSizer(wxHORIZONTAL);
-	items_sizer->SetMinSize(wxSize(-1, 40));
+	items_sizer->SetMinSize(wxSize(-1, 30));
 
+	// First column - Replace button and input with reduced size
+	wxBoxSizer* replace_column = new wxBoxSizer(wxVERTICAL);
 	replace_button = new ReplaceItemsButton(this);
-	items_sizer->Add(replace_button, 0, wxALL, 5);
+	replace_column->Add(replace_button, 0, wxALL, 2);
+	
+	replace_range_input = new wxTextCtrl(this, wxID_ANY, "", wxDefaultPosition, wxSize(100, -1));
+	replace_range_input->SetToolTip("Enter range to replace (e.g., 100-105,200)");
+	replace_column->Add(replace_range_input, 0, wxEXPAND | wxALL, 2);
+	
+	items_sizer->Add(replace_column, 0, wxEXPAND);
 
-	// After replace_button initialization, add range input
-	wxBoxSizer* range_sizer = new wxBoxSizer(wxHORIZONTAL);
-	replace_range_input = new wxTextCtrl(this, wxID_ANY, "", 
-		wxDefaultPosition, wxDefaultSize);
-	replace_range_input->SetToolTip("Enter range (e.g., 100-105,200)");
-	range_sizer->Add(new wxStaticText(this, wxID_ANY, "Replace Range:"), 
-		0, wxALIGN_CENTER_VERTICAL | wxRIGHT, 5);
-	range_sizer->Add(replace_range_input, 1, wxEXPAND);
-	items_sizer->Add(range_sizer, 1, wxALL | wxEXPAND, 5);
+	// Arrow bitmap in the middle
+	arrow_bitmap = new wxStaticBitmap(this, wxID_ANY, wxArtProvider::GetBitmap(wxART_GO_FORWARD));
+	items_sizer->Add(arrow_bitmap, 0, wxALIGN_CENTER | wxALL, 2);
 
-	wxBitmap bitmap = wxArtProvider::GetBitmap(ART_POSITION_GO, wxART_TOOLBAR, wxSize(16, 16));
-	arrow_bitmap = new wxStaticBitmap(this, wxID_ANY, bitmap);
-	items_sizer->Add(arrow_bitmap, 0, wxTOP, 15);
-
+	// Second column - With button and input with reduced size
+	wxBoxSizer* with_column = new wxBoxSizer(wxVERTICAL);
 	with_button = new ReplaceItemsButton(this);
-	items_sizer->Add(with_button, 0, wxALL, 5);
+	with_column->Add(with_button, 0, wxALL, 2);
+	
+	with_range_input = new wxTextCtrl(this, wxID_ANY, "", wxDefaultPosition, wxSize(100, -1));
+	with_range_input->SetToolTip("Enter range to replace with (e.g., 200-205,300)");
+	with_column->Add(with_range_input, 0, wxEXPAND | wxALL, 2);
+	
+	items_sizer->Add(with_column, 0, wxEXPAND);
 
-	items_sizer->Add(0, 0, 1, wxEXPAND, 5);
+	// Add button at the end
+	add_button = new wxButton(this, wxID_ANY, "Add", wxDefaultPosition, wxSize(60, -1));
+	items_sizer->Add(add_button, 0, wxALIGN_CENTER | wxALL, 2);
 
-	progress = new wxGauge(this, wxID_ANY, 100);
-	progress->SetValue(0);
-	items_sizer->Add(progress, 0, wxALL, 5);
-
-	sizer->Add(items_sizer, 1, wxALL | wxEXPAND, 5);
+	sizer->Add(items_sizer, 0, wxALL | wxEXPAND, 5);
 
 	// Add border controls after preset controls
 	wxBoxSizer* border_sizer = new wxBoxSizer(wxVERTICAL);
@@ -300,13 +304,12 @@ ReplaceItemsDialog::ReplaceItemsDialog(wxWindow* parent, bool selectionOnly) :
 
 	sizer->Add(wall_sizer, 0, wxALL | wxCENTER, 5);
 
-	// Create main buttons row (Add, Remove, Execute, Close)
+	// Create main buttons row (Execute, Close, Swap)
 	wxBoxSizer* buttons_sizer = new wxBoxSizer(wxHORIZONTAL);
 
 	// Left side buttons with fixed width
 	wxBoxSizer* left_buttons = new wxBoxSizer(wxHORIZONTAL);
-	add_button = new wxButton(this, wxID_ANY, wxT("Add"));
-	add_button->Enable(false);
+	add_button->Connect(wxEVT_BUTTON, wxCommandEventHandler(ReplaceItemsDialog::OnAddButtonClicked), NULL, this);
 	add_button->SetMinSize(wxSize(80, 30));
 	left_buttons->Add(add_button, 0, wxRIGHT, 5);
 
@@ -316,13 +319,6 @@ ReplaceItemsDialog::ReplaceItemsDialog(wxWindow* parent, bool selectionOnly) :
 	left_buttons->Add(remove_button, 0, wxRIGHT, 5);
 
 	buttons_sizer->Add(left_buttons, 0, wxALIGN_CENTER_VERTICAL | wxLEFT, 5);
-
-	// Center: Swap checkbox with proper proportions
-	wxBoxSizer* center_sizer = new wxBoxSizer(wxHORIZONTAL);
-	swap_checkbox = new wxCheckBox(this, wxID_ANY, "Swap Items");
-	swap_checkbox->SetToolTip("When checked, items will be swapped instead of just replaced");
-	center_sizer->Add(swap_checkbox, 1, wxALL | wxALIGN_CENTER_VERTICAL, 5);
-	buttons_sizer->Add(center_sizer, 1, wxEXPAND | wxALL, 5);
 
 	// Right side buttons with fixed width
 	wxBoxSizer* right_buttons = new wxBoxSizer(wxHORIZONTAL);
@@ -334,6 +330,12 @@ ReplaceItemsDialog::ReplaceItemsDialog(wxWindow* parent, bool selectionOnly) :
 	close_button = new wxButton(this, wxID_ANY, wxT("Close"));
 	close_button->SetMinSize(wxSize(80, 30));
 	right_buttons->Add(close_button, 0, wxRIGHT, 5);
+
+	// Add swap checkbox after close button with increased size
+	swap_checkbox = new wxCheckBox(this, wxID_ANY, "Swap Items");
+	swap_checkbox->SetMinSize(wxSize(120, 35));  // Increased width and height
+	swap_checkbox->SetToolTip("When checked, items will be swapped instead of just replaced");
+	right_buttons->Add(swap_checkbox, 0, wxLEFT | wxALIGN_CENTER_VERTICAL, 10);
 
 	buttons_sizer->Add(right_buttons, 0, wxALIGN_CENTER_VERTICAL | wxRIGHT, 5);
 
@@ -370,7 +372,7 @@ ReplaceItemsDialog::ReplaceItemsDialog(wxWindow* parent, bool selectionOnly) :
 	list->Connect(wxEVT_COMMAND_LISTBOX_SELECTED, wxCommandEventHandler(ReplaceItemsDialog::OnListSelected), NULL, this);
 	replace_button->Connect(wxEVT_LEFT_DOWN, wxMouseEventHandler(ReplaceItemsDialog::OnReplaceItemClicked), NULL, this);
 	with_button->Connect(wxEVT_LEFT_DOWN, wxMouseEventHandler(ReplaceItemsDialog::OnWithItemClicked), NULL, this);
-	add_button->Connect(wxEVT_COMMAND_BUTTON_CLICKED, wxCommandEventHandler(ReplaceItemsDialog::OnAddButtonClicked), NULL, this);
+	add_button->Connect(wxEVT_BUTTON, wxCommandEventHandler(ReplaceItemsDialog::OnAddButtonClicked), NULL, this);
 	remove_button->Connect(wxEVT_COMMAND_BUTTON_CLICKED, wxCommandEventHandler(ReplaceItemsDialog::OnRemoveButtonClicked), NULL, this);
 	execute_button->Connect(wxEVT_COMMAND_BUTTON_CLICKED, wxCommandEventHandler(ReplaceItemsDialog::OnExecuteButtonClicked), NULL, this);
 	close_button->Connect(wxEVT_COMMAND_BUTTON_CLICKED, wxCommandEventHandler(ReplaceItemsDialog::OnCancelButtonClicked), NULL, this);
@@ -401,6 +403,9 @@ ReplaceItemsDialog::ReplaceItemsDialog(wxWindow* parent, bool selectionOnly) :
 	wall_from_choice->Bind(wxEVT_CHOICE, &ReplaceItemsDialog::OnWallFromSelect, this);
 	wall_to_choice->Bind(wxEVT_CHOICE, &ReplaceItemsDialog::OnWallToSelect, this);
 	add_wall_button->Bind(wxEVT_BUTTON, &ReplaceItemsDialog::OnAddWallItems, this);
+	// Add to constructor around line 369
+replace_range_input->Bind(wxEVT_TEXT, &ReplaceItemsDialog::OnIdInput, this);
+with_range_input->Bind(wxEVT_TEXT, &ReplaceItemsDialog::OnIdInput, this);
 }
 
 ReplaceItemsDialog::~ReplaceItemsDialog() {
@@ -408,7 +413,7 @@ ReplaceItemsDialog::~ReplaceItemsDialog() {
 	list->Disconnect(wxEVT_COMMAND_LISTBOX_SELECTED, wxCommandEventHandler(ReplaceItemsDialog::OnListSelected), NULL, this);
 	replace_button->Disconnect(wxEVT_LEFT_DOWN, wxMouseEventHandler(ReplaceItemsDialog::OnReplaceItemClicked), NULL, this);
 	with_button->Disconnect(wxEVT_LEFT_DOWN, wxMouseEventHandler(ReplaceItemsDialog::OnWithItemClicked), NULL, this);
-	add_button->Disconnect(wxEVT_COMMAND_BUTTON_CLICKED, wxCommandEventHandler(ReplaceItemsDialog::OnAddButtonClicked), NULL, this);
+	add_button->Disconnect(wxEVT_BUTTON, wxCommandEventHandler(ReplaceItemsDialog::OnAddButtonClicked), NULL, this);
 	remove_button->Disconnect(wxEVT_COMMAND_BUTTON_CLICKED, wxCommandEventHandler(ReplaceItemsDialog::OnRemoveButtonClicked), NULL, this);
 	execute_button->Disconnect(wxEVT_COMMAND_BUTTON_CLICKED, wxCommandEventHandler(ReplaceItemsDialog::OnExecuteButtonClicked), NULL, this);
 	close_button->Disconnect(wxEVT_COMMAND_BUTTON_CLICKED, wxCommandEventHandler(ReplaceItemsDialog::OnCancelButtonClicked), NULL, this);
@@ -472,25 +477,19 @@ void ReplaceItemsDialog::OnWithItemClicked(wxMouseEvent& WXUNUSED(event)) {
 }
 
 void ReplaceItemsDialog::OnAddButtonClicked(wxCommandEvent& WXUNUSED(event)) {
-	const uint16_t withId = with_button->GetItemId();
-	if (withId == 0) {
-		wxMessageBox("Please select an item to replace with!", "Error", wxOK | wxICON_ERROR);
-		return;
-	}
-
-	// Check if range input is provided
-	wxString rangeStr = replace_range_input->GetValue().Trim();
-	if (!rangeStr.IsEmpty()) {
-		AddItemsFromRange(rangeStr, withId);
-	} else {
-		// Original single item add logic
+	wxString replaceRangeStr = replace_range_input->GetValue().Trim();
+	wxString withRangeStr = with_range_input->GetValue().Trim();
+	
+	// If both inputs are empty, use the button IDs
+	if (replaceRangeStr.IsEmpty() && withRangeStr.IsEmpty()) {
 		const uint16_t replaceId = replace_button->GetItemId();
-		if (replaceId == 0) {
-			wxMessageBox("Please select an item to replace!", "Error", wxOK | wxICON_ERROR);
+		const uint16_t withId = with_button->GetItemId();
+		
+		if (replaceId == 0 || withId == 0) {
+			wxMessageBox("Please select items to replace!", "Error", wxOK | wxICON_ERROR);
 			return;
 		}
 		
-		// Only check CanAdd for single items, not for range inputs
 		if (!list->CanAdd(replaceId, withId)) {
 			wxMessageBox("This item is already in the list or cannot be replaced with itself!", "Error", wxOK | wxICON_ERROR);
 			return;
@@ -501,57 +500,52 @@ void ReplaceItemsDialog::OnAddButtonClicked(wxCommandEvent& WXUNUSED(event)) {
 		item.withId = withId;
 		list->AddItem(item);
 	}
-
+	// Handle range inputs
+	else {
+		auto replaceRanges = ParseRangeString(replaceRangeStr);
+		auto withRanges = ParseRangeString(withRangeStr);
+		
+		if (replaceRanges.empty()) {
+			wxMessageBox("Please enter valid replace range!", "Error", wxOK | wxICON_ERROR);
+			return;
+		}
+		
+		if (withRanges.empty() && with_button->GetItemId() == 0) {
+			wxMessageBox("Please enter valid with range or select an item!", "Error", wxOK | wxICON_ERROR);
+			return;
+		}
+		
+		// If no with range specified, use the button ID for all replacements
+		uint16_t singleWithId = with_button->GetItemId();
+		bool useSingleWithId = withRanges.empty() && singleWithId != 0;
+		
+		for (const auto& replaceRange : replaceRanges) {
+			for (uint16_t fromId = replaceRange.first; fromId <= replaceRange.second; ++fromId) {
+				uint16_t toId;
+				if (useSingleWithId) {
+					toId = singleWithId;
+				} else {
+					// Calculate corresponding index in withRanges
+					size_t rangeIndex = (fromId - replaceRange.first) % withRanges.size();
+					toId = withRanges[rangeIndex].first + 
+						  (fromId - replaceRange.first) % 
+						  (withRanges[rangeIndex].second - withRanges[rangeIndex].first + 1);
+				}
+				
+				ReplacingItem item;
+				item.replaceId = fromId;
+				item.withId = toId;
+				list->AddItem(item);
+			}
+		}
+	}
+	
 	// Reset controls
 	replace_button->SetItemId(0);
 	with_button->SetItemId(0);
 	replace_range_input->SetValue("");
+	with_range_input->SetValue("");
 	UpdateWidgets();
-}
-
-void ReplaceItemsDialog::AddItemsFromRange(const wxString& rangeStr, uint16_t withId) {
-	wxString input = rangeStr;
-	wxStringTokenizer tokenizer(input, ",");
-	bool addedAny = false;
-	
-	while (tokenizer.HasMoreTokens()) {
-		wxString token = tokenizer.GetNextToken().Trim();
-		
-		if (token.Contains("-")) {
-			// Handle range (e.g., "100-105")
-			long start, end;
-			wxString startStr = token.Before('-').Trim();
-			wxString endStr = token.After('-').Trim();
-			
-			if (startStr.ToLong(&start) && endStr.ToLong(&end)) {
-				for (long i = start; i <= end; ++i) {
-					if (i > 0 && i <= 65535) {  // Valid uint16_t range
-						ReplacingItem item;
-						item.replaceId = static_cast<uint16_t>(i);
-						item.withId = withId;
-						// Skip CanAdd check for range inputs
-						list->AddItem(item);
-						addedAny = true;
-					}
-				}
-			}
-		} else {
-			// Handle single number
-			long id;
-			if (token.ToLong(&id) && id > 0 && id <= 65535) {
-				ReplacingItem item;
-				item.replaceId = static_cast<uint16_t>(id);
-				item.withId = withId;
-				// Skip CanAdd check for range inputs
-				list->AddItem(item);
-				addedAny = true;
-			}
-		}
-	}
-
-	if (!addedAny) {
-		wxMessageBox("No valid values in range!", "Error", wxOK | wxICON_ERROR);
-	}
 }
 
 void ReplaceItemsDialog::OnRemoveButtonClicked(wxCommandEvent& WXUNUSED(event)) {
@@ -639,7 +633,7 @@ void ReplaceItemsDialog::OnCancelButtonClicked(wxCommandEvent& WXUNUSED(event)) 
 void ReplaceItemsDialog::OnSwapCheckboxClicked(wxCommandEvent& WXUNUSED(event)) {
 	if (arrow_bitmap) {
 		// Get the original bitmap from the art provider
-		wxBitmap original = wxArtProvider::GetBitmap(ART_POSITION_GO, wxART_TOOLBAR, wxSize(16, 16));
+		wxBitmap original = wxArtProvider::GetBitmap(wxART_GO_FORWARD);
 		
 		// Create a rotated version using wxImage for the 180-degree rotation
 		wxImage img = original.ConvertToImage();
@@ -1387,5 +1381,68 @@ void ReplaceItemsDialog::AddReplacingItem(uint16_t fromId, uint16_t toId) {
 	if(list->CanAdd(item.replaceId, item.withId)) {
 		list->AddItem(item);
 	}
+}
+
+void ReplaceItemsDialog::OnIdInput(wxCommandEvent& event) {
+    wxTextCtrl* input = dynamic_cast<wxTextCtrl*>(event.GetEventObject());
+    if (!input) return;
+
+    // Get the entered ID
+    long id;
+    if (input->GetValue().ToLong(&id)) {
+        if (input == replace_range_input) {
+            replace_button->SetItemId(id);
+            UpdateAddButtonState();
+        } else if (input == with_range_input) {
+            with_button->SetItemId(id);
+            UpdateAddButtonState();
+        }
+    }
+}
+
+void ReplaceItemsDialog::UpdateAddButtonState() {
+    bool canAdd = false;
+    
+    // Check if we have valid IDs in either the range input or manual input
+    long replaceId = 0, withId = 0;
+    replace_range_input->GetValue().ToLong(&replaceId);
+    with_range_input->GetValue().ToLong(&withId);
+    
+    if (replaceId > 0 && withId > 0) {
+        const ItemType& replaceType = g_items.getItemType(replaceId);
+        const ItemType& withType = g_items.getItemType(withId);
+        canAdd = (replaceType.id != 0 && withType.id != 0);
+    }
+    
+    add_button->Enable(canAdd);
+}
+
+std::vector<std::pair<uint16_t, uint16_t>> ReplaceItemsDialog::ParseRangeString(const wxString& input) {
+    std::vector<std::pair<uint16_t, uint16_t>> ranges;
+    wxStringTokenizer tokenizer(input, ",");
+    
+    while (tokenizer.HasMoreTokens()) {
+        wxString token = tokenizer.GetNextToken().Trim();
+        
+        if (token.Contains("-")) {
+            // Handle range (e.g., "100-105")
+            long start, end;
+            wxString startStr = token.Before('-').Trim();
+            wxString endStr = token.After('-').Trim();
+            
+            if (startStr.ToLong(&start) && endStr.ToLong(&end) && 
+                start > 0 && end > 0 && start <= end && end <= 65535) {
+                ranges.push_back({static_cast<uint16_t>(start), static_cast<uint16_t>(end)});
+            }
+        } else {
+            // Handle single number
+            long id;
+            if (token.ToLong(&id) && id > 0 && id <= 65535) {
+                ranges.push_back({static_cast<uint16_t>(id), static_cast<uint16_t>(id)});
+            }
+        }
+    }
+    
+    return ranges;
 }
 

@@ -167,6 +167,9 @@ private:
 	// Add new range input control
 	wxTextCtrl* replace_range_input;
 
+	// Add after replace_range_input declaration
+	wxTextCtrl* with_range_input;
+
 	// Add after preset_choice declaration
 	wxChoice* border_from_choice;
 	wxChoice* border_to_choice;
@@ -179,6 +182,7 @@ private:
 	wxChoice* wall_to_choice;
 	wxChoice* wall_orientation_choice;
 	wxButton* add_wall_button;
+
 
 	void OnPresetSelect(wxCommandEvent& event);
 	void OnAddPreset(wxCommandEvent& event);
@@ -198,6 +202,11 @@ private:
 	wxTextCtrl* replace_id_input;
 	wxTextCtrl* with_id_input;
 	wxButton* add_manual_button;
+
+	void OnIdInput(wxCommandEvent& event);
+	void UpdateAddButtonState();
+
+	std::vector<std::pair<uint16_t, uint16_t>> ParseRangeString(const wxString& input);
 };
 
 #endif
