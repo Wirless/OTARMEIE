@@ -58,6 +58,9 @@ public:
 	uint8_t getEmptyDoorID() const;
 	Position getDoorPositionByID(uint8_t id) const;
 
+	// Added accessor to retrieve the list of tile positions for export functionality.
+	const PositionList& getTilePositions() const { return tiles; }
+
 private:
 	uint32_t id;
 

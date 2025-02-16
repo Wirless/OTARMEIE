@@ -182,6 +182,8 @@ namespace Config {
 
 		AUTO_SELECT_RAW_ON_RIGHTCLICK,
 
+		
+
 		LAST,
 	};
 
