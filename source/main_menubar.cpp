@@ -1964,11 +1964,190 @@ void MainMenuBar::OnMapStatistics(wxCommandEvent& WXUNUSED(event)) {
 }
 
 void MainMenuBar::OnMapCleanup(wxCommandEvent& WXUNUSED(event)) {
-	int ok = g_gui.PopupDialog("Clean map", "Do you want to remove all invalid items from the map?", wxYES | wxNO);
+    if (!g_gui.IsEditorOpen()) {
+        return;
+    }
 
-	if (ok == wxID_YES) {
-		g_gui.GetCurrentMap().cleanInvalidTiles(true);
-	}
+    // Create custom cleanup dialog
+    wxDialog* dialog = new wxDialog(frame, wxID_ANY, "Map Cleanup Options", 
+        wxDefaultPosition, wxSize(600, 500), wxDEFAULT_DIALOG_STYLE);
+    
+    wxBoxSizer* mainSizer = new wxBoxSizer(wxVERTICAL);
+
+    // Create cleanup options
+    wxStaticBoxSizer* optionsSizer = new wxStaticBoxSizer(wxVERTICAL, dialog, "Cleanup Options");
+    
+    // Invalid items checkbox
+    wxCheckBox* cleanInvalid = new wxCheckBox(dialog, wxID_ANY, "Remove Invalid Items");
+    optionsSizer->Add(cleanInvalid, 0, wxALL, 5);
+    
+    // ID Range cleanup section
+    wxStaticBoxSizer* rangeSizer = new wxStaticBoxSizer(wxVERTICAL, dialog, "Clean Items by ID Range");
+    
+    // Enable ID range checkbox
+    wxCheckBox* useRange = new wxCheckBox(dialog, wxID_ANY, "Clean Items by ID Range");
+    rangeSizer->Add(useRange, 0, wxALL, 5);
+    
+    // ID range input
+    wxTextCtrl* rangeInput = new wxTextCtrl(dialog, wxID_ANY);
+    rangeInput->SetToolTip("Enter IDs or ranges separated by commas (e.g., 2222,2244-2266,5219)");
+    rangeInput->Enable(false);
+    rangeSizer->Add(rangeInput, 0, wxEXPAND | wxALL, 5);
+    
+    // Bind enable/disable of range input
+    useRange->Bind(wxEVT_CHECKBOX, [rangeInput](wxCommandEvent& evt) {
+        rangeInput->Enable(evt.IsChecked());
+    });
+    
+    // Ignored IDs section
+    wxStaticBoxSizer* ignoreSizer = new wxStaticBoxSizer(wxVERTICAL, dialog, "Ignored IDs");
+    
+    // Enable ignored IDs checkbox
+    wxCheckBox* useIgnored = new wxCheckBox(dialog, wxID_ANY, "Use Ignored IDs");
+    ignoreSizer->Add(useIgnored, 0, wxALL, 5);
+    
+    // Ignored IDs input
+    wxTextCtrl* ignoreInput = new wxTextCtrl(dialog, wxID_ANY);
+    ignoreInput->SetToolTip("Enter IDs to ignore, separated by commas. Use '-' for ranges (e.g., 1212,1241,1256-1261)");
+    ignoreInput->Enable(false);
+    ignoreSizer->Add(ignoreInput, 0, wxEXPAND | wxALL, 5);
+    
+    // Bind enable/disable of ignore input
+    useIgnored->Bind(wxEVT_CHECKBOX, [ignoreInput](wxCommandEvent& evt) {
+        ignoreInput->Enable(evt.IsChecked());
+    });
+
+    // Add options to main sizer
+    mainSizer->Add(optionsSizer, 0, wxEXPAND | wxALL, 5);
+    mainSizer->Add(rangeSizer, 0, wxEXPAND | wxALL, 5);
+    mainSizer->Add(ignoreSizer, 0, wxEXPAND | wxALL, 5);
+
+    // Add warning text
+    wxStaticText* warning = new wxStaticText(dialog, wxID_ANY, 
+        "Warning: This operation cannot be undone!\nPlease save your map before proceeding.");
+    warning->SetForegroundColour(*wxRED);
+    mainSizer->Add(warning, 0, wxALL | wxALIGN_CENTER, 10);
+
+    // Add buttons
+    wxStdDialogButtonSizer* buttonSizer = new wxStdDialogButtonSizer();
+    wxButton* okButton = new wxButton(dialog, wxID_OK, "Clean");
+    wxButton* cancelButton = new wxButton(dialog, wxID_CANCEL, "Cancel");
+    buttonSizer->AddButton(okButton);
+    buttonSizer->AddButton(cancelButton);
+    buttonSizer->Realize();
+    mainSizer->Add(buttonSizer, 0, wxALIGN_CENTER | wxALL, 5);
+
+    dialog->SetSizer(mainSizer);
+    mainSizer->Fit(dialog);
+    dialog->Center();
+
+    // Show dialog and process result
+    if (dialog->ShowModal() == wxID_OK) {
+        bool hasOptions = cleanInvalid->GetValue() || useRange->GetValue();
+        if (!hasOptions) {
+            g_gui.PopupDialog("Error", "Please select at least one cleanup option!", wxOK);
+            dialog->Destroy();
+            return;
+        }
+
+        int64_t totalCount = 0;
+        Map& currentMap = g_gui.GetCurrentMap();
+
+        g_gui.CreateLoadBar("Cleaning map...");
+
+        try {
+            // Process invalid items if selected
+            if (cleanInvalid->GetValue()) {
+                g_gui.SetLoadDone(0, "Removing invalid tiles...");
+                currentMap.cleanInvalidTiles(true);
+                g_gui.SetLoadDone(50); // Set to 50% after invalid tiles
+            }
+
+            // Process ID range cleanup if selected
+            if (useRange->GetValue()) {
+                auto ranges = ParseRangeString(rangeInput->GetValue());
+                if (!ranges.empty()) {
+                    std::vector<uint16_t> ignoredIds;
+                    std::vector<std::pair<uint16_t, uint16_t>> ignoredRanges;
+
+                    // Parse ignored IDs if enabled
+                    if (useIgnored->GetValue()) {
+                        wxString ignoreText = ignoreInput->GetValue();
+                        auto ignoredPairs = ParseRangeString(ignoreText);
+                        for (const auto& pair : ignoredPairs) {
+                            if (pair.first == pair.second) {
+                                ignoredIds.push_back(pair.first);
+                            } else {
+                                ignoredRanges.push_back(pair);
+                            }
+                        }
+                    }
+
+                    // Create cleanup condition with progress tracking
+                    struct CleanupCondition {
+                        std::vector<std::pair<uint16_t, uint16_t>> ranges;
+                        std::vector<uint16_t> ignoredIds;
+                        std::vector<std::pair<uint16_t, uint16_t>> ignoredRanges;
+                        long long totalTiles;
+                        int startProgress;
+                        int endProgress;
+
+                        bool operator()(Map& map, Item* item, long long removed, long long done) {
+                            // Update progress every 1024 tiles
+                            if (done % 1024 == 0) {
+                                int progress = startProgress + ((done * (endProgress - startProgress)) / totalTiles);
+                                g_gui.SetLoadDone(progress);
+                            }
+
+                            uint16_t id = item->getID();
+
+                            // Check if item should be ignored
+                            for (uint16_t ignoredId : ignoredIds) {
+                                if (id == ignoredId) return false;
+                            }
+                            for (const auto& range : ignoredRanges) {
+                                if (id >= range.first && id <= range.second) return false;
+                            }
+
+                            // Check if item is in cleanup ranges
+                            for (const auto& range : ranges) {
+                                if (id >= range.first && id <= range.second) return true;
+                            }
+                            return false;
+                        }
+                    } condition;
+
+                    condition.ranges = ranges;
+                    condition.ignoredIds = ignoredIds;
+                    condition.ignoredRanges = ignoredRanges;
+                    condition.totalTiles = currentMap.getTileCount();
+                    condition.startProgress = cleanInvalid->GetValue() ? 50 : 0;
+                    condition.endProgress = 100;
+
+                    g_gui.SetLoadDone(condition.startProgress, "Removing items by ID range...");
+                    int64_t count = RemoveItemOnMap(currentMap, condition, false);
+                    totalCount += count;
+                }
+            }
+
+            // Ensure progress bar reaches 100%
+            g_gui.SetLoadDone(100);
+            
+            // Show results
+            wxString msg;
+            msg << totalCount << " items removed in total.";
+            g_gui.PopupDialog("Cleanup Complete", msg, wxOK);
+            
+            currentMap.doChange();
+        }
+        catch (...) {
+            g_gui.PopupDialog("Error", "An error occurred during cleanup.", wxOK | wxICON_ERROR);
+        }
+
+        g_gui.DestroyLoadBar();
+    }
+
+    dialog->Destroy();
 }
 
 void MainMenuBar::OnMapProperties(wxCommandEvent& WXUNUSED(event)) {
