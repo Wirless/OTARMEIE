@@ -2876,11 +2876,23 @@ void MapCanvas::OnFill(wxCommandEvent& WXUNUSED(event)) {
     wxBoxSizer* squareSizer = new wxBoxSizer(wxHORIZONTAL);
     wxStaticText* squareLabel = new wxStaticText(optionsDialog, wxID_ANY, "Square Size:");
     wxSpinCtrl* squareSizeCtrl = new wxSpinCtrl(optionsDialog, wxID_ANY, "10", 
-        wxDefaultPosition, wxDefaultSize, wxSP_ARROW_KEYS, 1, 100, 10);
+        wxDefaultPosition, wxDefaultSize, wxSP_ARROW_KEYS, 1, 500, 10);
     
     squareSizer->Add(squareLabel, 0, wxALL | wxALIGN_CENTER_VERTICAL, 5);
     squareSizer->Add(squareSizeCtrl, 1, wxALL, 5);
     mainSizer->Add(squareSizer, 0, wxLEFT | wxRIGHT | wxBOTTOM | wxEXPAND, 5);
+    
+    // Add checkbox for area validation
+    wxCheckBox* validateAreaCheckbox = new wxCheckBox(optionsDialog, wxID_ANY, 
+        "Validate enclosed area (only for normal/gradual fill)");
+    validateAreaCheckbox->SetValue(true);
+    mainSizer->Add(validateAreaCheckbox, 0, wxALL, 10);
+    
+    // Add checkbox for square gradual fill
+    wxCheckBox* squareGradualCheckbox = new wxCheckBox(optionsDialog, wxID_ANY, 
+        "Create square with gradual fill (instead of flood fill)");
+    squareGradualCheckbox->SetValue(false);
+    mainSizer->Add(squareGradualCheckbox, 0, wxALL, 10);
     
     // Add buttons
     wxBoxSizer* buttonSizer = new wxBoxSizer(wxHORIZONTAL);
@@ -2918,6 +2930,8 @@ void MapCanvas::OnFill(wxCommandEvent& WXUNUSED(event)) {
     bool isSquareFill = squareFillRadio->GetValue();
     int batchSize = batchSizeCtrl->GetValue();
     int squareSize = squareSizeCtrl->GetValue();
+    bool validateArea = validateAreaCheckbox->GetValue();
+    bool squareGradual = squareGradualCheckbox->GetValue();
     
     optionsDialog->Destroy();
     
@@ -2957,21 +2971,80 @@ void MapCanvas::OnFill(wxCommandEvent& WXUNUSED(event)) {
         OutputDebugStringA(wxString::Format("GENERATING SQUARE OF SIZE %d (%d TILES)...\n", 
             squareSize, to_fill.size()).c_str());
         
-        // Apply the brush to all positions
-        Action* action = editor.actionQueue->createAction(ACTION_DRAW);
-        for(const Position& pos : to_fill) {
-            Tile* tile = editor.map.getTile(pos);
-            if(!tile) {
-                tile = editor.map.createTile(pos.x, pos.y, pos.z);
+        // For large squares, process in batches
+        if (to_fill.size() > 10000) {
+            std::vector<Position> all_positions(to_fill.begin(), to_fill.end());
+            size_t total_positions = all_positions.size();
+            size_t positions_processed = 0;
+            const size_t SQUARE_BATCH_SIZE = 10000;
+            
+            while (positions_processed < total_positions) {
+                // Calculate batch size
+                size_t remaining = total_positions - positions_processed;
+                size_t current_batch_size = std::min(SQUARE_BATCH_SIZE, remaining);
+                
+                // Create action for this batch
+                Action* action = editor.actionQueue->createAction(ACTION_DRAW);
+                
+                // Process current batch
+                for (size_t i = 0; i < current_batch_size; ++i) {
+                    const Position& pos = all_positions[positions_processed + i];
+                    Tile* tile = editor.map.getTile(pos);
+                    if (!tile) {
+                        tile = editor.map.createTile(pos.x, pos.y, pos.z);
+                    }
+                    Tile* new_tile = tile->deepCopy(editor.map);
+                    g_gui.GetCurrentBrush()->draw(&editor.map, new_tile, nullptr);
+                    action->addChange(newd Change(new_tile));
+                }
+                
+                // Apply batch
+                editor.addAction(action);
+                g_gui.RefreshView();
+                
+                // Update processed count
+                positions_processed += current_batch_size;
+                
+                // Show progress
+                double progress_percent = (static_cast<double>(positions_processed) / total_positions) * 100.0;
+                OutputDebugStringA(wxString::Format("SQUARE FILL PROGRESS: %.1f%%\n", progress_percent).c_str());
+                
+                if (positions_processed < total_positions) {
+                    wxString message = wxString::Format(
+                        "Processed %zu of %zu tiles (%.1f%%).\nThere are %zu more tiles to process.\nContinue filling?",
+                        positions_processed, total_positions, progress_percent, total_positions - positions_processed);
+                    
+                    int answer = g_gui.PopupDialog(
+                        "Continue Square Fill?", 
+                        message,
+                        wxYES_NO
+                    );
+                    
+                    if (answer != wxID_YES) {
+                        OutputDebugStringA("SQUARE FILL STOPPED BY USER!\n");
+                        break;
+                    }
+                }
             }
-            Tile* new_tile = tile->deepCopy(editor.map);
-            g_gui.GetCurrentBrush()->draw(&editor.map, new_tile, nullptr);
-            action->addChange(newd Change(new_tile));
+            
+            OutputDebugStringA("SQUARE FILL COMPLETE! THE VOID HAS BEEN SQUARED!\n");
+        } else {
+            // Apply the brush to all positions at once for smaller squares
+            Action* action = editor.actionQueue->createAction(ACTION_DRAW);
+            for(const Position& pos : to_fill) {
+                Tile* tile = editor.map.getTile(pos);
+                if(!tile) {
+                    tile = editor.map.createTile(pos.x, pos.y, pos.z);
+                }
+                Tile* new_tile = tile->deepCopy(editor.map);
+                g_gui.GetCurrentBrush()->draw(&editor.map, new_tile, nullptr);
+                action->addChange(newd Change(new_tile));
+            }
+            
+            editor.addAction(action);
+            g_gui.RefreshView();
+            OutputDebugStringA("SQUARE FILL COMPLETE! THE VOID HAS BEEN SQUARED!\n");
         }
-        
-        editor.addAction(action);
-        g_gui.RefreshView();
-        OutputDebugStringA("SQUARE FILL COMPLETE! THE VOID HAS BEEN SQUARED!\n");
     }
     // BORDER FILL OPTION
     else if(is_border_fill && (isNormalFill || isGradualFill)) {
@@ -3087,56 +3160,114 @@ void MapCanvas::OnFill(wxCommandEvent& WXUNUSED(event)) {
         to_check.push(start);
         bool escape_found = false;
 
-        while (!to_check.empty() && !escape_found) {
-            Position pos = to_check.front();
-            to_check.pop();
-
-            if (checked.count(pos) > 0) continue;
-            checked.insert(pos);
-
-            // Check map boundaries
-            if (pos.x <= 0 || pos.y <= 0 || 
-                pos.x >= editor.map.getWidth() - 1 || 
-                pos.y >= editor.map.getHeight() - 1) {
-                escape_found = true;
-                break;
-            }
-
-            Tile* tile = editor.map.getTile(pos);
-            bool is_empty = (!tile || 
-                           (!tile->spawn || !g_settings.getInteger(Config::SHOW_SPAWNS)) && 
-                           (!tile->creature || !g_settings.getInteger(Config::SHOW_CREATURES)) && 
-                           !tile->getTopItem());
-
-            if (!is_empty) continue;
-
-            // Check adjacent tiles (4-directional)
-            Position adjacent[4] = {
-                Position(pos.x + 1, pos.y, floor),
-                Position(pos.x - 1, pos.y, floor),
-                Position(pos.x, pos.y + 1, floor),
-                Position(pos.x, pos.y - 1, floor)
-            };
-
-            for (const Position& next : adjacent) {
-                if (checked.count(next) > 0) continue;
-                
-                Tile* next_tile = editor.map.getTile(next);
-                bool next_is_empty = (!next_tile || 
-                                    (!next_tile->spawn || !g_settings.getInteger(Config::SHOW_SPAWNS)) && 
-                                    (!next_tile->creature || !g_settings.getInteger(Config::SHOW_CREATURES)) && 
-                                    !next_tile->getTopItem());
-                
-                if (next_is_empty) {
-                    to_check.push(next);
+        if (validateArea) {
+            while (!to_check.empty() && !escape_found) {
+                Position pos = to_check.front();
+                to_check.pop();
+    
+                if (checked.count(pos) > 0) continue;
+                checked.insert(pos);
+    
+                // Check map boundaries
+                if (pos.x <= 0 || pos.y <= 0 || 
+                    pos.x >= editor.map.getWidth() - 1 || 
+                    pos.y >= editor.map.getHeight() - 1) {
+                    escape_found = true;
+                    break;
+                }
+    
+                Tile* tile = editor.map.getTile(pos);
+                bool is_empty = (!tile || 
+                               (!tile->spawn || !g_settings.getInteger(Config::SHOW_SPAWNS)) && 
+                               (!tile->creature || !g_settings.getInteger(Config::SHOW_CREATURES)) && 
+                               !tile->getTopItem());
+    
+                if (!is_empty) continue;
+    
+                // Check adjacent tiles (4-directional)
+                Position adjacent[4] = {
+                    Position(pos.x + 1, pos.y, floor),
+                    Position(pos.x - 1, pos.y, floor),
+                    Position(pos.x, pos.y + 1, floor),
+                    Position(pos.x, pos.y - 1, floor)
+                };
+    
+                for (const Position& next : adjacent) {
+                    if (checked.count(next) > 0) continue;
+                    
+                    Tile* next_tile = editor.map.getTile(next);
+                    bool next_is_empty = (!next_tile || 
+                                        (!next_tile->spawn || !g_settings.getInteger(Config::SHOW_SPAWNS)) && 
+                                        (!next_tile->creature || !g_settings.getInteger(Config::SHOW_CREATURES)) && 
+                                        !next_tile->getTopItem());
+    
+                    if (next_is_empty) {
+                        to_check.push(next);
+                    }
                 }
             }
-        }
-
-        if (escape_found) {
-            OutputDebugStringA("AREA NOT ENCLOSED! THE VOID LEAKS!\n");
-            g_gui.PopupDialog("Error", "Cannot fill - area is not enclosed.", wxOK);
-            return;
+    
+            if (escape_found) {
+                OutputDebugStringA("AREA NOT ENCLOSED! THE VOID LEAKS!\n");
+                if (validateArea) {
+                    g_gui.PopupDialog("Error", "Cannot fill - area is not enclosed.", wxOK);
+                    return;
+                }
+                // If not validating, we'll continue with the fill using the tiles we've found so far
+            }
+        } else {
+            // If not validating area, use flood fill with a maximum limit
+            const int MAX_FILL_SIZE = 100000; // Safety limit
+            
+            while (!to_check.empty() && checked.size() < MAX_FILL_SIZE) {
+                Position pos = to_check.front();
+                to_check.pop();
+    
+                if (checked.count(pos) > 0) continue;
+                checked.insert(pos);
+    
+                // Check map boundaries (still needed to avoid going out of bounds)
+                if (pos.x <= 0 || pos.y <= 0 || 
+                    pos.x >= editor.map.getWidth() - 1 || 
+                    pos.y >= editor.map.getHeight() - 1) {
+                    continue;
+                }
+    
+                Tile* tile = editor.map.getTile(pos);
+                bool is_empty = (!tile || 
+                               (!tile->spawn || !g_settings.getInteger(Config::SHOW_SPAWNS)) && 
+                               (!tile->creature || !g_settings.getInteger(Config::SHOW_CREATURES)) && 
+                               !tile->getTopItem());
+    
+                if (!is_empty) continue;
+    
+                // Check adjacent tiles (4-directional)
+                Position adjacent[4] = {
+                    Position(pos.x + 1, pos.y, floor),
+                    Position(pos.x - 1, pos.y, floor),
+                    Position(pos.x, pos.y + 1, floor),
+                    Position(pos.x, pos.y - 1, floor)
+                };
+    
+                for (const Position& next : adjacent) {
+                    if (checked.count(next) > 0) continue;
+                    
+                    Tile* next_tile = editor.map.getTile(next);
+                    bool next_is_empty = (!next_tile || 
+                                        (!next_tile->spawn || !g_settings.getInteger(Config::SHOW_SPAWNS)) && 
+                                        (!next_tile->creature || !g_settings.getInteger(Config::SHOW_CREATURES)) && 
+                                        !next_tile->getTopItem());
+    
+                    if (next_is_empty) {
+                        to_check.push(next);
+                    }
+                }
+            }
+            
+            if (checked.size() >= MAX_FILL_SIZE) {
+                OutputDebugStringA("FILL AREA TOO LARGE! LIMITING TO SAFETY THRESHOLD.\n");
+                g_gui.PopupDialog("Warning", wxString::Format("Fill area is very large. Limited to %d tiles for safety.", MAX_FILL_SIZE), wxOK);
+            }
         }
 
         OutputDebugStringA(wxString::Format("FOUND %d TILES TO FILL NORMALLY!\n", checked.size()).c_str());
@@ -3160,66 +3291,159 @@ void MapCanvas::OnFill(wxCommandEvent& WXUNUSED(event)) {
     else if(isGradualFill) {
         OutputDebugStringA("GRADUAL FILL INITIATED! PREPARING BATCHES...\n");
         
-        // First, validate if the area is enclosed
-        std::queue<Position> to_check;
         std::set<Position> checked;
-        to_check.push(start);
-        bool escape_found = false;
         
-        // First pass: check if area is enclosed
-        while (!to_check.empty() && !escape_found) {
-            Position pos = to_check.front();
-            to_check.pop();
-
-            if (checked.count(pos) > 0) continue;
-            checked.insert(pos);
-
-            // Check map boundaries
-            if (pos.x <= 0 || pos.y <= 0 || 
-                pos.x >= editor.map.getWidth() - 1 || 
-                pos.y >= editor.map.getHeight() - 1) {
-                escape_found = true;
-                break;
+        // If square gradual is enabled, create a square instead of flood filling
+        if (squareGradual) {
+            OutputDebugStringA("USING SQUARE SHAPE FOR GRADUAL FILL!\n");
+            
+            // Calculate square boundaries
+            int half_size = squareSize / 2;
+            int min_x = map_x - half_size;
+            int max_x = map_x + half_size;
+            int min_y = map_y - half_size;
+            int max_y = map_y + half_size;
+            
+            // Create a set of positions to fill
+            for(int y = min_y; y <= max_y; ++y) {
+                for(int x = min_x; x <= max_x; ++x) {
+                    // Only add empty tiles
+                    Position pos(x, y, floor);
+                    Tile* tile = editor.map.getTile(pos);
+                    bool is_empty = (!tile || 
+                                   (!tile->spawn || !g_settings.getInteger(Config::SHOW_SPAWNS)) && 
+                                   (!tile->creature || !g_settings.getInteger(Config::SHOW_CREATURES)) && 
+                                   !tile->getTopItem());
+                    
+                    if (is_empty) {
+                        checked.insert(pos);
+                    }
+                }
             }
-
-            Tile* tile = editor.map.getTile(pos);
-            bool is_empty = (!tile || 
-                           (!tile->spawn || !g_settings.getInteger(Config::SHOW_SPAWNS)) && 
-                           (!tile->creature || !g_settings.getInteger(Config::SHOW_CREATURES)) && 
-                           !tile->getTopItem());
-
-            if (!is_empty) continue;
-
-            // Check adjacent tiles (4-directional)
-            Position adjacent[4] = {
-                Position(pos.x + 1, pos.y, floor),
-                Position(pos.x - 1, pos.y, floor),
-                Position(pos.x, pos.y + 1, floor),
-                Position(pos.x, pos.y - 1, floor)
-            };
-
-            for (const Position& next : adjacent) {
-                if (checked.count(next) > 0) continue;
+            
+            OutputDebugStringA(wxString::Format("CREATED SQUARE SHAPE WITH %d TILES FOR GRADUAL FILL\n", 
+                checked.size()).c_str());
+        }
+        // Otherwise, use flood fill with or without validation
+        else {
+            // First, validate if the area is enclosed (if requested)
+            std::queue<Position> to_check;
+            to_check.push(start);
+            bool escape_found = false;
+            
+            // First pass: check if area is enclosed (if validation is enabled)
+            if (validateArea) {
+                while (!to_check.empty() && !escape_found) {
+                    Position pos = to_check.front();
+                    to_check.pop();
+        
+                    if (checked.count(pos) > 0) continue;
+                    checked.insert(pos);
+        
+                    // Check map boundaries
+                    if (pos.x <= 0 || pos.y <= 0 || 
+                        pos.x >= editor.map.getWidth() - 1 || 
+                        pos.y >= editor.map.getHeight() - 1) {
+                        escape_found = true;
+                        break;
+                    }
+        
+                    Tile* tile = editor.map.getTile(pos);
+                    bool is_empty = (!tile || 
+                                   (!tile->spawn || !g_settings.getInteger(Config::SHOW_SPAWNS)) && 
+                                   (!tile->creature || !g_settings.getInteger(Config::SHOW_CREATURES)) && 
+                                   !tile->getTopItem());
+        
+                    if (!is_empty) continue;
+        
+                    // Check adjacent tiles (4-directional)
+                    Position adjacent[4] = {
+                        Position(pos.x + 1, pos.y, floor),
+                        Position(pos.x - 1, pos.y, floor),
+                        Position(pos.x, pos.y + 1, floor),
+                        Position(pos.x, pos.y - 1, floor)
+                    };
+        
+                    for (const Position& next : adjacent) {
+                        if (checked.count(next) > 0) continue;
+                        
+                        Tile* next_tile = editor.map.getTile(next);
+                        bool next_is_empty = (!next_tile || 
+                                            (!next_tile->spawn || !g_settings.getInteger(Config::SHOW_SPAWNS)) && 
+                                            (!next_tile->creature || !g_settings.getInteger(Config::SHOW_CREATURES)) && 
+                                            !next_tile->getTopItem());
+        
+                        if (next_is_empty) {
+                            to_check.push(next);
+                        }
+                    }
+                }
+        
+                if (escape_found) {
+                    OutputDebugStringA("AREA NOT ENCLOSED! THE VOID LEAKS!\n");
+                    if (validateArea) {
+                        g_gui.PopupDialog("Error", "Cannot fill - area is not enclosed.", wxOK);
+                        return;
+                    }
+                    // If not validating, we'll continue with the fill using the tiles we've found so far
+                }
+            } else {
+                // If not validating area, use flood fill with a maximum limit
+                const int MAX_FILL_SIZE = 100000; // Safety limit
                 
-                Tile* next_tile = editor.map.getTile(next);
-                bool next_is_empty = (!next_tile || 
-                                    (!next_tile->spawn || !g_settings.getInteger(Config::SHOW_SPAWNS)) && 
-                                    (!next_tile->creature || !g_settings.getInteger(Config::SHOW_CREATURES)) && 
-                                    !next_tile->getTopItem());
+                while (!to_check.empty() && checked.size() < MAX_FILL_SIZE) {
+                    Position pos = to_check.front();
+                    to_check.pop();
+        
+                    if (checked.count(pos) > 0) continue;
+                    checked.insert(pos);
+        
+                    // Check map boundaries (still needed to avoid going out of bounds)
+                    if (pos.x <= 0 || pos.y <= 0 || 
+                        pos.x >= editor.map.getWidth() - 1 || 
+                        pos.y >= editor.map.getHeight() - 1) {
+                        continue;
+                    }
+        
+                    Tile* tile = editor.map.getTile(pos);
+                    bool is_empty = (!tile || 
+                                   (!tile->spawn || !g_settings.getInteger(Config::SHOW_SPAWNS)) && 
+                                   (!tile->creature || !g_settings.getInteger(Config::SHOW_CREATURES)) && 
+                                   !tile->getTopItem());
+        
+                    if (!is_empty) continue;
+        
+                    // Check adjacent tiles (4-directional)
+                    Position adjacent[4] = {
+                        Position(pos.x + 1, pos.y, floor),
+                        Position(pos.x - 1, pos.y, floor),
+                        Position(pos.x, pos.y + 1, floor),
+                        Position(pos.x, pos.y - 1, floor)
+                    };
+        
+                    for (const Position& next : adjacent) {
+                        if (checked.count(next) > 0) continue;
+                        
+                        Tile* next_tile = editor.map.getTile(next);
+                        bool next_is_empty = (!next_tile || 
+                                            (!next_tile->spawn || !g_settings.getInteger(Config::SHOW_SPAWNS)) && 
+                                            (!next_tile->creature || !g_settings.getInteger(Config::SHOW_CREATURES)) && 
+                                            !next_tile->getTopItem());
+        
+                        if (next_is_empty) {
+                            to_check.push(next);
+                        }
+                    }
+                }
                 
-                if (next_is_empty) {
-                    to_check.push(next);
+                if (checked.size() >= MAX_FILL_SIZE) {
+                    OutputDebugStringA("FILL AREA TOO LARGE! LIMITING TO SAFETY THRESHOLD.\n");
+                    g_gui.PopupDialog("Warning", wxString::Format("Fill area is very large. Limited to %d tiles for safety.", MAX_FILL_SIZE), wxOK);
                 }
             }
         }
-
-        if (escape_found) {
-            OutputDebugStringA("AREA NOT ENCLOSED! THE VOID LEAKS!\n");
-            g_gui.PopupDialog("Error", "Cannot fill - area is not enclosed.", wxOK);
-            return;
-        }
         
-        // Area is enclosed, proceed with gradual fill
+        // Area is enclosed or we're ignoring validation, proceed with gradual fill
         OutputDebugStringA(wxString::Format("FOUND %d TILES TO FILL GRADUALLY!\n", checked.size()).c_str());
         
         // Convert set to vector for easier batch processing
