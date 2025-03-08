@@ -25,6 +25,7 @@
 #include <time.h>
 #include <wx/wfstream.h>
 #include <wx/xml/xml.h>
+#include <wx/radiobut.h>
 #include <algorithm>
 
 #include "gui.h"
@@ -2782,9 +2783,7 @@ void AnimationTimer::Stop() {
 void MapCanvas::OnFill(wxCommandEvent& WXUNUSED(event)) {
     OutputDebugStringA("INITIATING IMPROVED FILL PROTOCOL! NOW WITH BORDER AWARENESS!\n");
 
-
-
-// Check if we should show the warning do not remove this warning functionality
+    // Check if we should show the warning do not remove this warning functionality
     if (show_fill_warning) {
         wxDialog* dialog = new wxDialog(g_gui.root, wxID_ANY, "Fill Area", 
             wxDefaultPosition, wxDefaultSize, wxDEFAULT_DIALOG_STYLE);
@@ -2824,20 +2823,103 @@ void MapCanvas::OnFill(wxCommandEvent& WXUNUSED(event)) {
         }
         dialog->Destroy();
     }
-	// DONT TOUCH this warning box pls 
+    // DONT TOUCH this warning box pls 
 
     if (!g_gui.GetCurrentBrush()) {
         OutputDebugStringA("NO BRUSH SELECTED! THE VOID CANNOT BE FILLED!\n");
         return;
     }
 
-    PositionVector tilestodraw;
-    PositionVector tilestoborder;
-
     // Get cursor position
     int map_x, map_y;
     ScreenToMap(cursor_x, cursor_y, &map_x, &map_y);
     Position start(map_x, map_y, floor);
+    
+    // Create fill options dialog
+    wxDialog* optionsDialog = new wxDialog(g_gui.root, wxID_ANY, "Fill Options", 
+        wxDefaultPosition, wxDefaultSize, wxDEFAULT_DIALOG_STYLE);
+        
+    wxBoxSizer* mainSizer = new wxBoxSizer(wxVERTICAL);
+    
+    // Add title and description
+    wxStaticText* title = new wxStaticText(optionsDialog, wxID_ANY, "Select Fill Method");
+    title->SetFont(title->GetFont().Bold());
+    mainSizer->Add(title, 0, wxALL | wxALIGN_CENTER, 10);
+    
+    wxStaticText* description = new wxStaticText(optionsDialog, wxID_ANY, 
+        "Choose how you want to fill the area:");
+    mainSizer->Add(description, 0, wxLEFT | wxRIGHT | wxBOTTOM, 10);
+    
+    // Create radio buttons for fill options
+    wxRadioButton* normalFillRadio = new wxRadioButton(optionsDialog, wxID_ANY, 
+        "Normal Fill (enclosed area)", wxDefaultPosition, wxDefaultSize, wxRB_GROUP);
+    wxRadioButton* gradualFillRadio = new wxRadioButton(optionsDialog, wxID_ANY, 
+        "Gradual Fill (process in batches)");
+    wxRadioButton* squareFillRadio = new wxRadioButton(optionsDialog, wxID_ANY, 
+        "Square Area (generate square from position)");
+    
+    mainSizer->Add(normalFillRadio, 0, wxALL, 5);
+    mainSizer->Add(gradualFillRadio, 0, wxALL, 5);
+    mainSizer->Add(squareFillRadio, 0, wxALL, 5);
+    
+    // Add batch size input for gradual fill
+    wxBoxSizer* batchSizer = new wxBoxSizer(wxHORIZONTAL);
+    wxStaticText* batchLabel = new wxStaticText(optionsDialog, wxID_ANY, "Batch Size:");
+    wxSpinCtrl* batchSizeCtrl = new wxSpinCtrl(optionsDialog, wxID_ANY, "1000", 
+        wxDefaultPosition, wxDefaultSize, wxSP_ARROW_KEYS, 100, 10000, 1000);
+    
+    batchSizer->Add(batchLabel, 0, wxALL | wxALIGN_CENTER_VERTICAL, 5);
+    batchSizer->Add(batchSizeCtrl, 1, wxALL, 5);
+    mainSizer->Add(batchSizer, 0, wxLEFT | wxRIGHT | wxBOTTOM | wxEXPAND, 5);
+    
+    // Add square size input for square fill
+    wxBoxSizer* squareSizer = new wxBoxSizer(wxHORIZONTAL);
+    wxStaticText* squareLabel = new wxStaticText(optionsDialog, wxID_ANY, "Square Size:");
+    wxSpinCtrl* squareSizeCtrl = new wxSpinCtrl(optionsDialog, wxID_ANY, "10", 
+        wxDefaultPosition, wxDefaultSize, wxSP_ARROW_KEYS, 1, 100, 10);
+    
+    squareSizer->Add(squareLabel, 0, wxALL | wxALIGN_CENTER_VERTICAL, 5);
+    squareSizer->Add(squareSizeCtrl, 1, wxALL, 5);
+    mainSizer->Add(squareSizer, 0, wxLEFT | wxRIGHT | wxBOTTOM | wxEXPAND, 5);
+    
+    // Add buttons
+    wxBoxSizer* buttonSizer = new wxBoxSizer(wxHORIZONTAL);
+    wxButton* okButton = new wxButton(optionsDialog, wxID_OK, "Fill");
+    wxButton* cancelButton = new wxButton(optionsDialog, wxID_CANCEL, "Cancel");
+    buttonSizer->Add(okButton, 0, wxALL, 5);
+    buttonSizer->Add(cancelButton, 0, wxALL, 5);
+    mainSizer->Add(buttonSizer, 0, wxALIGN_CENTER | wxALL, 10);
+    
+    optionsDialog->SetSizer(mainSizer);
+    mainSizer->Fit(optionsDialog);
+    
+    // Enable/disable controls based on selected option
+    auto updateControls = [&]() {
+        batchSizeCtrl->Enable(gradualFillRadio->GetValue());
+        squareSizeCtrl->Enable(squareFillRadio->GetValue());
+    };
+    
+    normalFillRadio->Bind(wxEVT_RADIOBUTTON, [&](wxCommandEvent&) { updateControls(); });
+    gradualFillRadio->Bind(wxEVT_RADIOBUTTON, [&](wxCommandEvent&) { updateControls(); });
+    squareFillRadio->Bind(wxEVT_RADIOBUTTON, [&](wxCommandEvent&) { updateControls(); });
+    
+    // Initialize control states
+    updateControls();
+    
+    // Show dialog and check result
+    if (optionsDialog->ShowModal() != wxID_OK) {
+        optionsDialog->Destroy();
+        return;
+    }
+    
+    // Get selected options
+    bool isNormalFill = normalFillRadio->GetValue();
+    bool isGradualFill = gradualFillRadio->GetValue();
+    bool isSquareFill = squareFillRadio->GetValue();
+    int batchSize = batchSizeCtrl->GetValue();
+    int squareSize = squareSizeCtrl->GetValue();
+    
+    optionsDialog->Destroy();
     
     Tile* start_tile = editor.map.getTile(start);
     bool is_border_fill = false;
@@ -2852,10 +2934,50 @@ void MapCanvas::OnFill(wxCommandEvent& WXUNUSED(event)) {
         }
     }
 
-    if(is_border_fill) {
+    // SQUARE FILL OPTION
+    if(isSquareFill) {
+        OutputDebugStringA("SQUARE FILL INITIATED! GENERATING SQUARE AREA!\n");
+        
+        // Calculate square boundaries
+        int half_size = squareSize / 2;
+        int min_x = map_x - half_size;
+        int max_x = map_x + half_size;
+        int min_y = map_y - half_size;
+        int max_y = map_y + half_size;
+        
+        // Create a set of positions to fill
+        std::set<Position> to_fill;
+        
+        for(int y = min_y; y <= max_y; ++y) {
+            for(int x = min_x; x <= max_x; ++x) {
+                to_fill.insert(Position(x, y, floor));
+            }
+        }
+        
+        OutputDebugStringA(wxString::Format("GENERATING SQUARE OF SIZE %d (%d TILES)...\n", 
+            squareSize, to_fill.size()).c_str());
+        
+        // Apply the brush to all positions
+        Action* action = editor.actionQueue->createAction(ACTION_DRAW);
+        for(const Position& pos : to_fill) {
+            Tile* tile = editor.map.getTile(pos);
+            if(!tile) {
+                tile = editor.map.createTile(pos.x, pos.y, pos.z);
+            }
+            Tile* new_tile = tile->deepCopy(editor.map);
+            g_gui.GetCurrentBrush()->draw(&editor.map, new_tile, nullptr);
+            action->addChange(newd Change(new_tile));
+        }
+        
+        editor.addAction(action);
+        g_gui.RefreshView();
+        OutputDebugStringA("SQUARE FILL COMPLETE! THE VOID HAS BEEN SQUARED!\n");
+    }
+    // BORDER FILL OPTION
+    else if(is_border_fill && (isNormalFill || isGradualFill)) {
         OutputDebugStringA("BORDER DETECTED! INITIATING SNAKE-LIKE BORDER FILL!\n");
         
-        const int MAX_BORDERS_PER_BATCH = BLOCK_SIZE * 4; // Safety limit per batch
+        const int MAX_BORDERS_PER_BATCH = isGradualFill ? batchSize : (BLOCK_SIZE * 4); // Safety limit per batch
         std::queue<Position> border_queue;
         std::set<Position> processed_borders;
         std::set<Position> to_fill;
@@ -2954,7 +3076,9 @@ void MapCanvas::OnFill(wxCommandEvent& WXUNUSED(event)) {
                 continue_filling = false;
             }
         }
-    } else {
+    }
+    // NORMAL FILL OPTION
+    else if(isNormalFill) {
         // Normal fill with area validation
         OutputDebugStringA("NORMAL FILL INITIATED! VALIDATING AREA...\n");
         
@@ -3031,6 +3155,131 @@ void MapCanvas::OnFill(wxCommandEvent& WXUNUSED(event)) {
         editor.addAction(action);
         g_gui.RefreshView();
         OutputDebugStringA("NORMAL FILL COMPLETE! THE VOID HAS BEEN FILLED!\n");
+    }
+    // GRADUAL FILL OPTION
+    else if(isGradualFill) {
+        OutputDebugStringA("GRADUAL FILL INITIATED! PREPARING BATCHES...\n");
+        
+        // First, validate if the area is enclosed
+        std::queue<Position> to_check;
+        std::set<Position> checked;
+        to_check.push(start);
+        bool escape_found = false;
+        
+        // First pass: check if area is enclosed
+        while (!to_check.empty() && !escape_found) {
+            Position pos = to_check.front();
+            to_check.pop();
+
+            if (checked.count(pos) > 0) continue;
+            checked.insert(pos);
+
+            // Check map boundaries
+            if (pos.x <= 0 || pos.y <= 0 || 
+                pos.x >= editor.map.getWidth() - 1 || 
+                pos.y >= editor.map.getHeight() - 1) {
+                escape_found = true;
+                break;
+            }
+
+            Tile* tile = editor.map.getTile(pos);
+            bool is_empty = (!tile || 
+                           (!tile->spawn || !g_settings.getInteger(Config::SHOW_SPAWNS)) && 
+                           (!tile->creature || !g_settings.getInteger(Config::SHOW_CREATURES)) && 
+                           !tile->getTopItem());
+
+            if (!is_empty) continue;
+
+            // Check adjacent tiles (4-directional)
+            Position adjacent[4] = {
+                Position(pos.x + 1, pos.y, floor),
+                Position(pos.x - 1, pos.y, floor),
+                Position(pos.x, pos.y + 1, floor),
+                Position(pos.x, pos.y - 1, floor)
+            };
+
+            for (const Position& next : adjacent) {
+                if (checked.count(next) > 0) continue;
+                
+                Tile* next_tile = editor.map.getTile(next);
+                bool next_is_empty = (!next_tile || 
+                                    (!next_tile->spawn || !g_settings.getInteger(Config::SHOW_SPAWNS)) && 
+                                    (!next_tile->creature || !g_settings.getInteger(Config::SHOW_CREATURES)) && 
+                                    !next_tile->getTopItem());
+                
+                if (next_is_empty) {
+                    to_check.push(next);
+                }
+            }
+        }
+
+        if (escape_found) {
+            OutputDebugStringA("AREA NOT ENCLOSED! THE VOID LEAKS!\n");
+            g_gui.PopupDialog("Error", "Cannot fill - area is not enclosed.", wxOK);
+            return;
+        }
+        
+        // Area is enclosed, proceed with gradual fill
+        OutputDebugStringA(wxString::Format("FOUND %d TILES TO FILL GRADUALLY!\n", checked.size()).c_str());
+        
+        // Convert set to vector for easier batch processing
+        std::vector<Position> all_positions(checked.begin(), checked.end());
+        
+        // Process in batches
+        size_t total_positions = all_positions.size();
+        size_t positions_processed = 0;
+        
+        while (positions_processed < total_positions) {
+            // Calculate batch size
+            size_t remaining = total_positions - positions_processed;
+            size_t current_batch_size = std::min(static_cast<size_t>(batchSize), remaining);
+            
+            // Create action for this batch
+            Action* action = editor.actionQueue->createAction(ACTION_DRAW);
+            
+            // Process current batch
+            for (size_t i = 0; i < current_batch_size; ++i) {
+                const Position& pos = all_positions[positions_processed + i];
+                Tile* tile = editor.map.getTile(pos);
+                if (!tile) {
+                    tile = editor.map.createTile(pos.x, pos.y, pos.z);
+                }
+                Tile* new_tile = tile->deepCopy(editor.map);
+                g_gui.GetCurrentBrush()->draw(&editor.map, new_tile, nullptr);
+                action->addChange(newd Change(new_tile));
+            }
+            
+            // Apply batch
+            editor.addAction(action);
+            g_gui.RefreshView();
+            
+            // Update processed count
+            positions_processed += current_batch_size;
+            
+            // Show progress and ask to continue
+            if (positions_processed < total_positions) {
+                double progress_percent = (static_cast<double>(positions_processed) / total_positions) * 100.0;
+                
+                wxString message = wxString::Format(
+                    "Processed %zu of %zu tiles (%.1f%%).\nThere are %zu more tiles to process.\nContinue filling?",
+                    positions_processed, total_positions, progress_percent, total_positions - positions_processed);
+                
+                int answer = g_gui.PopupDialog(
+                    "Continue Gradual Fill?", 
+                    message,
+                    wxYES_NO
+                );
+                
+                if (answer != wxID_YES) {
+                    OutputDebugStringA("GRADUAL FILL STOPPED BY USER!\n");
+                    break;
+                }
+                
+                OutputDebugStringA(wxString::Format("CONTINUING WITH NEXT BATCH... (%.1f%% COMPLETE)\n", progress_percent).c_str());
+            }
+        }
+        
+        OutputDebugStringA("GRADUAL FILL COMPLETE! THE VOID HAS BEEN FILLED GRADUALLY!\n");
     }
 }
 
