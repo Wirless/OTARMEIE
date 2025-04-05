@@ -131,7 +131,6 @@ public:
 protected:
 	void RecalculateGrid();
 	void DeselectAll();
-	void CreateBrushButtons(size_t start_index, size_t end_index);
 
 protected:
 	std::vector<BrushButton*> brush_buttons;

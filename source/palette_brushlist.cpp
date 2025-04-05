@@ -680,73 +680,35 @@ BrushGridBox::BrushGridBox(wxWindow* parent, const TilesetCategory* _tileset) :
 	SetBackgroundStyle(wxBG_STYLE_PAINT);
 	
 	// Create grid sizer
-	grid_sizer = new wxFlexGridSizer(0, columns, 2, 2);
+	grid_sizer = new wxFlexGridSizer(0, columns, 2, 2); // 0 rows (dynamic), 1 column, 2px gaps
 	
-	// Calculate initial size
-	int window_width = GetClientSize().GetWidth();
-	int button_width = 36; // 32px + 4px padding
-	columns = std::max(1, (window_width - 4) / button_width);
-	grid_sizer->SetCols(columns);
-	
-	// For large item sets (over 1000 items), create buttons in batches
-	const size_t BATCH_SIZE = 500;
-	size_t total_items = tileset->brushlist.size();
-	size_t current_batch = 0;
-	
-	if(total_items > 1000) {
-		// Create initial visible batch
-		size_t end_index = std::min(BATCH_SIZE, total_items);
-		CreateBrushButtons(0, end_index);
-		
-		// Schedule timer for creating remaining batches
-		wxTimer* timer = new wxTimer(this);
-		Bind(wxEVT_TIMER, [=](wxTimerEvent&) {
-			static size_t next_batch = BATCH_SIZE;
-			if(next_batch < total_items) {
-				size_t end_index = std::min(next_batch + BATCH_SIZE, total_items);
-				CreateBrushButtons(next_batch, end_index);
-				next_batch += BATCH_SIZE;
-				
-				if(next_batch < total_items) {
-					timer->Start(100, true); // Schedule next batch
-				} else {
-					delete timer;
-				}
-				Layout();
-				FitInside();
-			}
-		});
-		timer->Start(100, true);
-	} else {
-		// For smaller sets, create all buttons at once
-		CreateBrushButtons(0, total_items);
-	}
-	
-	SetSizer(grid_sizer);
-	FitInside();
-	SetScrollRate(32, 32);
-}
-
-void BrushGridBox::CreateBrushButtons(size_t start_index, size_t end_index) {
-	for(size_t i = start_index; i < end_index && i < tileset->brushlist.size(); ++i) {
-		Brush* brush = tileset->brushlist[i];
-		ASSERT(brush);
-		
-		BrushButton* bb = new BrushButton(this, brush, RENDER_SIZE_32x32);
+	// Create buttons for each brush
+	for(BrushVector::const_iterator iter = tileset->brushlist.begin(); iter != tileset->brushlist.end(); ++iter) {
+		ASSERT(*iter);
+		BrushButton* bb = new BrushButton(this, *iter, RENDER_SIZE_32x32);
 		
 		// Set tooltip with item name and ID
 		wxString tooltip;
-		if(brush->isRaw()) {
-			RAWBrush* raw = static_cast<RAWBrush*>(brush);
+		if((*iter)->isRaw()) {
+			RAWBrush* raw = static_cast<RAWBrush*>(*iter);
 			tooltip = wxString::Format("%s [%d]", raw->getName(), raw->getItemID());
 		} else {
-			tooltip = wxString::Format("%s", brush->getName());
+			tooltip = wxString::Format("%s", (*iter)->getName());
 		}
 		bb->SetToolTip(tooltip);
 		
 		grid_sizer->Add(bb, 0, wxALL, 1);
 		brush_buttons.push_back(bb);
 	}
+	
+	SetSizer(grid_sizer);
+	
+	// Enable scrolling
+	FitInside();
+	SetScrollRate(32, 32);
+	
+	// Calculate initial grid layout
+	RecalculateGrid();
 }
 
 BrushGridBox::~BrushGridBox() {
