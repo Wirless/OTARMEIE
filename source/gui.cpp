@@ -1043,8 +1043,18 @@ PaletteWindow* GUI::CreatePalette() {
 		return nullptr;
 	}
 
-	auto* palette = newd PaletteWindow(root, g_materials.tilesets);
-	aui_manager->AddPane(palette, wxAuiPaneInfo().Caption("Palette").TopDockable(false).BottomDockable(false));
+	auto* palette = new PaletteWindow(root, g_materials.tilesets);
+	
+	// Add the palette with resizable properties
+	wxAuiPaneInfo paneInfo;
+	paneInfo.Caption("Palette")
+		.TopDockable(false)
+		.BottomDockable(false)
+		.Resizable(true)  // Allow resizing
+		.MinSize(225, 250)  // Minimum size
+		.BestSize(230, 400);  // Default size
+		
+	aui_manager->AddPane(palette, paneInfo);
 	aui_manager->Update();
 
 	// Make us the active palette

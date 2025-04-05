@@ -26,6 +26,7 @@ enum BrushListType {
 	BRUSHLIST_SMALL_ICONS,
 	BRUSHLIST_LISTBOX,
 	BRUSHLIST_TEXT_LISTBOX,
+	BRUSHLIST_GRID
 };
 
 class BrushBoxInterface {
@@ -109,21 +110,45 @@ protected:
 	DECLARE_EVENT_TABLE();
 };
 
-// A panel capapable of displaying a collection of brushes
-// Brushes can be arranged in either list or icon fashion
-// Contents are *not* created when the panel is created,
-// but on the first call to LoadContents(), this is to
-// allow procedural loading (faster)
+class BrushGridBox : public wxScrolledWindow, public BrushBoxInterface {
+public:
+	BrushGridBox(wxWindow* parent, const TilesetCategory* _tileset);
+	~BrushGridBox();
 
+	wxWindow* GetSelfWindow() { return this; }
+
+	// Select the first brush
+	void SelectFirstBrush();
+	// Returns the currently selected brush
+	Brush* GetSelectedBrush() const;
+	// Select the brush in the parameter
+	bool SelectBrush(const Brush* brush);
+
+	// Event handling
+	void OnClickBrushButton(wxCommandEvent& event);
+	void OnSize(wxSizeEvent& event);
+
+protected:
+	void RecalculateGrid();
+	void DeselectAll();
+	void CreateBrushButtons(size_t start_index, size_t end_index);
+
+protected:
+	std::vector<BrushButton*> brush_buttons;
+	wxFlexGridSizer* grid_sizer;
+	int columns;
+
+	DECLARE_EVENT_TABLE();
+};
+
+// A panel capable of displaying a collection of brushes
 class BrushPanel : public wxPanel {
 public:
 	BrushPanel(wxWindow* parent);
 	~BrushPanel();
 
 	// Interface
-	// Flushes this panel and consequent views will feature reloaded data
 	void InvalidateContents();
-	// Loads the content (This must be called before the panel is displayed, else it will appear empty
 	void LoadContents();
 
 	// Sets the display type (list or icons)
@@ -134,9 +159,9 @@ public:
 
 	// Select the first brush
 	void SelectFirstBrush();
-	// Returns the currently selected brush (First brush if panel is not loaded)
+	// Returns the currently selected brush
 	Brush* GetSelectedBrush() const;
-	// Select the brush in the parameter, this only changes the look of the panel
+	// Select the brush in the parameter
 	bool SelectBrush(const Brush* whatbrush);
 
 	// Called when the window is about to be displayed
@@ -146,6 +171,10 @@ public:
 
 	// wxWidgets event handlers
 	void OnClickListBoxRow(wxCommandEvent& event);
+	void OnViewModeToggle(wxCommandEvent& event);
+
+protected:
+	void LoadViewMode();
 
 protected:
 	const TilesetCategory* tileset;
@@ -153,6 +182,7 @@ protected:
 	BrushBoxInterface* brushbox;
 	bool loaded;
 	BrushListType list_type;
+	wxCheckBox* view_mode_toggle;
 
 	DECLARE_EVENT_TABLE();
 };

@@ -274,8 +274,8 @@ void BrushPalettePanel::OnClickAddItemToTileset(wxCommandEvent& WXUNUSED(event))
 // A container of brush buttons
 
 BEGIN_EVENT_TABLE(BrushPanel, wxPanel)
-// Listbox style
 EVT_LISTBOX(wxID_ANY, BrushPanel::OnClickListBoxRow)
+EVT_CHECKBOX(wxID_ANY, BrushPanel::OnViewModeToggle)
 END_EVENT_TABLE()
 
 BrushPanel::BrushPanel(wxWindow* parent) :
@@ -283,9 +283,17 @@ BrushPanel::BrushPanel(wxWindow* parent) :
 	tileset(nullptr),
 	brushbox(nullptr),
 	loaded(false),
-	list_type(BRUSHLIST_LISTBOX) {
-	sizer = newd wxBoxSizer(wxVERTICAL);
-	SetSizerAndFit(sizer);
+	list_type(BRUSHLIST_LISTBOX),
+	view_mode_toggle(nullptr) {
+	
+	sizer = new wxBoxSizer(wxVERTICAL);
+	
+	// Add view mode toggle checkbox
+	view_mode_toggle = new wxCheckBox(this, wxID_ANY, "Grid View");
+	view_mode_toggle->SetValue(false);
+	sizer->Add(view_mode_toggle, 0, wxALL, 5);
+	
+	SetSizer(sizer);
 }
 
 BrushPanel::~BrushPanel() {
@@ -330,22 +338,38 @@ void BrushPanel::LoadContents() {
 	}
 	loaded = true;
 	ASSERT(tileset != nullptr);
-	switch (list_type) {
-		case BRUSHLIST_LARGE_ICONS:
-			brushbox = newd BrushIconBox(this, tileset, RENDER_SIZE_32x32);
-			break;
-		case BRUSHLIST_SMALL_ICONS:
-			brushbox = newd BrushIconBox(this, tileset, RENDER_SIZE_16x16);
-			break;
-		case BRUSHLIST_LISTBOX:
-			brushbox = newd BrushListBox(this, tileset);
-			break;
-		default:
-			break;
+	
+	LoadViewMode();
+}
+
+void BrushPanel::LoadViewMode() {
+	// Remove old brushbox if it exists
+	if (brushbox) {
+		sizer->Detach(brushbox->GetSelfWindow());
+		brushbox->GetSelfWindow()->Destroy();
+		brushbox = nullptr;
 	}
-	ASSERT(brushbox != nullptr);
+	
+	// Create new brushbox based on view mode
+	if (view_mode_toggle->GetValue()) {
+		brushbox = new BrushGridBox(this, tileset);
+	} else {
+		switch (list_type) {
+			case BRUSHLIST_LARGE_ICONS:
+				brushbox = new BrushIconBox(this, tileset, RENDER_SIZE_32x32);
+				break;
+			case BRUSHLIST_SMALL_ICONS:
+				brushbox = new BrushIconBox(this, tileset, RENDER_SIZE_16x16);
+				break;
+			case BRUSHLIST_LISTBOX:
+			default:
+				brushbox = new BrushListBox(this, tileset);
+				break;
+		}
+	}
+	
 	sizer->Add(brushbox->GetSelfWindow(), 1, wxEXPAND);
-	Fit();
+	Layout();
 	brushbox->SelectFirstBrush();
 }
 
@@ -370,8 +394,6 @@ Brush* BrushPanel::GetSelectedBrush() const {
 
 bool BrushPanel::SelectBrush(const Brush* whatbrush) {
 	if (loaded) {
-		// std::cout << loaded << std::endl;
-		// std::cout << brushbox << std::endl;
 		ASSERT(brushbox != nullptr);
 		return brushbox->SelectBrush(whatbrush);
 	}
@@ -408,6 +430,12 @@ void BrushPanel::OnClickListBoxRow(wxCommandEvent& event) {
 	}
 
 	g_gui.SelectBrush(tileset->brushlist[n], tileset->getType());
+}
+
+void BrushPanel::OnViewModeToggle(wxCommandEvent& event) {
+	if (loaded) {
+		LoadViewMode();
+	}
 }
 
 // ============================================================================
@@ -635,5 +663,161 @@ void BrushListBox::OnKey(wxKeyEvent& event) {
 						g_gui.GetCurrentMapTab()->GetEventHandler()->AddPendingEvent(event);
 					}
 			}
+	}
+}
+
+BEGIN_EVENT_TABLE(BrushGridBox, wxScrolledWindow)
+EVT_TOGGLEBUTTON(wxID_ANY, BrushGridBox::OnClickBrushButton)
+EVT_SIZE(BrushGridBox::OnSize)
+END_EVENT_TABLE()
+
+BrushGridBox::BrushGridBox(wxWindow* parent, const TilesetCategory* _tileset) :
+	wxScrolledWindow(parent, wxID_ANY, wxDefaultPosition, wxDefaultSize, wxVSCROLL),
+	BrushBoxInterface(_tileset),
+	grid_sizer(nullptr),
+	columns(1) {
+	
+	SetBackgroundStyle(wxBG_STYLE_PAINT);
+	
+	// Create grid sizer
+	grid_sizer = new wxFlexGridSizer(0, columns, 2, 2);
+	
+	// Calculate initial size
+	int window_width = GetClientSize().GetWidth();
+	int button_width = 36; // 32px + 4px padding
+	columns = std::max(1, (window_width - 4) / button_width);
+	grid_sizer->SetCols(columns);
+	
+	// For large item sets (over 1000 items), create buttons in batches
+	const size_t BATCH_SIZE = 500;
+	size_t total_items = tileset->brushlist.size();
+	size_t current_batch = 0;
+	
+	if(total_items > 1000) {
+		// Create initial visible batch
+		size_t end_index = std::min(BATCH_SIZE, total_items);
+		CreateBrushButtons(0, end_index);
+		
+		// Schedule timer for creating remaining batches
+		wxTimer* timer = new wxTimer(this);
+		Bind(wxEVT_TIMER, [=](wxTimerEvent&) {
+			static size_t next_batch = BATCH_SIZE;
+			if(next_batch < total_items) {
+				size_t end_index = std::min(next_batch + BATCH_SIZE, total_items);
+				CreateBrushButtons(next_batch, end_index);
+				next_batch += BATCH_SIZE;
+				
+				if(next_batch < total_items) {
+					timer->Start(100, true); // Schedule next batch
+				} else {
+					delete timer;
+				}
+				Layout();
+				FitInside();
+			}
+		});
+		timer->Start(100, true);
+	} else {
+		// For smaller sets, create all buttons at once
+		CreateBrushButtons(0, total_items);
+	}
+	
+	SetSizer(grid_sizer);
+	FitInside();
+	SetScrollRate(32, 32);
+}
+
+void BrushGridBox::CreateBrushButtons(size_t start_index, size_t end_index) {
+	for(size_t i = start_index; i < end_index && i < tileset->brushlist.size(); ++i) {
+		Brush* brush = tileset->brushlist[i];
+		ASSERT(brush);
+		
+		BrushButton* bb = new BrushButton(this, brush, RENDER_SIZE_32x32);
+		
+		// Set tooltip with item name and ID
+		wxString tooltip;
+		if(brush->isRaw()) {
+			RAWBrush* raw = static_cast<RAWBrush*>(brush);
+			tooltip = wxString::Format("%s [%d]", raw->getName(), raw->getItemID());
+		} else {
+			tooltip = wxString::Format("%s", brush->getName());
+		}
+		bb->SetToolTip(tooltip);
+		
+		grid_sizer->Add(bb, 0, wxALL, 1);
+		brush_buttons.push_back(bb);
+	}
+}
+
+BrushGridBox::~BrushGridBox() {
+	// Grid sizer will delete all children automatically
+}
+
+void BrushGridBox::SelectFirstBrush() {
+	if(tileset && tileset->size() > 0) {
+		DeselectAll();
+		brush_buttons[0]->SetValue(true);
+	}
+}
+
+Brush* BrushGridBox::GetSelectedBrush() const {
+	if(!tileset) return nullptr;
+	
+	for(std::vector<BrushButton*>::const_iterator it = brush_buttons.begin(); it != brush_buttons.end(); ++it) {
+		if((*it)->GetValue()) {
+			return (*it)->brush;
+		}
+	}
+	return nullptr;
+}
+
+bool BrushGridBox::SelectBrush(const Brush* whatbrush) {
+	DeselectAll();
+	for(std::vector<BrushButton*>::iterator it = brush_buttons.begin(); it != brush_buttons.end(); ++it) {
+		if((*it)->brush == whatbrush) {
+			(*it)->SetValue(true);
+			return true;
+		}
+	}
+	return false;
+}
+
+void BrushGridBox::DeselectAll() {
+	for(std::vector<BrushButton*>::iterator it = brush_buttons.begin(); it != brush_buttons.end(); ++it) {
+		(*it)->SetValue(false);
+	}
+}
+
+void BrushGridBox::OnClickBrushButton(wxCommandEvent& event) {
+	wxObject* obj = event.GetEventObject();
+	BrushButton* btn = dynamic_cast<BrushButton*>(obj);
+	if(btn) {
+		wxWindow* w = this;
+		while((w = w->GetParent()) && dynamic_cast<PaletteWindow*>(w) == nullptr);
+		if(w) {
+			g_gui.ActivatePalette(static_cast<PaletteWindow*>(w));
+		}
+		g_gui.SelectBrush(btn->brush, tileset->getType());
+	}
+}
+
+void BrushGridBox::OnSize(wxSizeEvent& event) {
+	RecalculateGrid();
+	event.Skip();
+}
+
+void BrushGridBox::RecalculateGrid() {
+	if(!grid_sizer) return;
+	
+	// Calculate how many columns can fit
+	int window_width = GetClientSize().GetWidth();
+	int button_width = 36; // 32px + 4px padding
+	int new_columns = std::max(1, (window_width - 4) / button_width);
+	
+	if(new_columns != columns) {
+		columns = new_columns;
+		grid_sizer->SetCols(columns);
+		grid_sizer->Layout();
+		FitInside(); // Update scroll window virtual size
 	}
 }

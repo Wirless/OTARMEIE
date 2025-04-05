@@ -53,10 +53,12 @@ PaletteWindow::PaletteWindow(wxWindow* parent, const TilesetContainer& tilesets)
 	house_palette(nullptr),
 	waypoint_palette(nullptr),
 	raw_palette(nullptr) {
+	
+	// Allow resizing but maintain minimum size
 	SetMinSize(wxSize(225, 250));
-
-	// Create choicebook
-	choicebook = newd wxChoicebook(this, PALETTE_CHOICEBOOK, wxDefaultPosition, wxSize(230, 250));
+	
+	// Create choicebook with EXPAND flag to fill available space
+	choicebook = new wxChoicebook(this, PALETTE_CHOICEBOOK, wxDefaultPosition, wxDefaultSize);
 
 	terrain_palette = static_cast<BrushPalettePanel*>(CreateTerrainPalette(choicebook, tilesets));
 	choicebook->AddPage(terrain_palette, terrain_palette->GetName());
@@ -82,16 +84,13 @@ PaletteWindow::PaletteWindow(wxWindow* parent, const TilesetContainer& tilesets)
 	raw_palette = static_cast<BrushPalettePanel*>(CreateRAWPalette(choicebook, tilesets));
 	choicebook->AddPage(raw_palette, raw_palette->GetName());
 
-	// Setup sizers
-	wxSizer* sizer = newd wxBoxSizer(wxVERTICAL);
-	choicebook->SetMinSize(wxSize(225, 300));
-	sizer->Add(choicebook, 1, wxEXPAND);
+	// Setup sizers to allow resizing
+	wxSizer* sizer = new wxBoxSizer(wxVERTICAL);
+	sizer->Add(choicebook, 1, wxEXPAND | wxALL, 2);
 	SetSizer(sizer);
 
 	// Load first page
 	LoadCurrentContents();
-
-	Fit();
 }
 
 PaletteWindow::~PaletteWindow() {
